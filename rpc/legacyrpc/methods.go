@@ -1944,7 +1944,7 @@ func purchaseTicket(icmd interface{}, w *wallet.Wallet) (interface{}, error) {
 
 	hashes, err := w.PurchaseTickets(0, spendLimit, minConf, ticketAddr,
 		account, numTickets, poolAddr, poolFee, expiry, w.RelayFee(),
-		w.TicketFeeIncrement(), cmd.NoSplitTransaction)
+		w.TicketFeeIncrement(), *cmd.NoSplitTransaction)
 	if err != nil {
 		return nil, err
 	}
