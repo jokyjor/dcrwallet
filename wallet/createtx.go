@@ -6,8 +6,10 @@
 package wallet
 
 import (
+	"context"
+	"encoding/binary"
+	"errors"
 	"fmt"
-	"github.com/decred/dcrrpcclient"
 	"time"
 	"errors"
 	"encoding/binary"
@@ -19,10 +21,10 @@ import (
 	"github.com/decred/dcrd/chaincfg/chainec"
 	"github.com/decred/dcrd/chaincfg/chainhash"
 	"github.com/decred/dcrd/dcrjson"
+	"github.com/decred/dcrd/dcrutil"
 	"github.com/decred/dcrd/mempool"
 	"github.com/decred/dcrd/txscript"
 	"github.com/decred/dcrd/wire"
-	"github.com/decred/dcrutil"
 	"github.com/decred/dcrwallet/apperrors"
 	"github.com/decred/dcrwallet/wallet/internal/txsizes"
 	"github.com/decred/dcrwallet/wallet/txauthor"
@@ -388,18 +390,30 @@ func (w *Wallet) insertMultisigOutIntoTxMgr(ns walletdb.ReadWriteBucket, msgTx *
 	return w.TxStore.AddMultisigOut(ns, rec, nil, index)
 }
 
+// checkHighFees performs a high fee check if enabled and possible, returning an
+// error if the transaction pays high fees.
+func (w *Wallet) checkHighFees(totalInput dcrutil.Amount, tx *wire.MsgTx) error {
+	if w.AllowHighFees {
+		return nil
+	}
+	if !txrules.PaysHighFees(totalInput, tx) {
+		return nil
+	}
+	return apperrors.New(apperrors.ErrHighFees, "transaction pays exceedingly high fees")
+}
+
 // txToOutputs creates a transaction, selecting previous outputs from an account
 // with no less than minconf confirmations, and creates a signed transaction
 // that pays to each of the outputs.
 func (w *Wallet) txToOutputs(outputs []*wire.TxOut, account uint32, minconf int32,
 	randomizeChangeIdx bool) (*txauthor.AuthoredTx, error) {
 
-	chainClient, err := w.requireChainClient()
+	n, err := w.NetworkBackend()
 	if err != nil {
 		return nil, err
 	}
 
-	return w.txToOutputsInternal(outputs, account, minconf, chainClient,
+	return w.txToOutputsInternal(outputs, account, minconf, n,
 		randomizeChangeIdx, w.RelayFee())
 }
 
@@ -415,7 +429,7 @@ func (w *Wallet) txToOutputs(outputs []*wire.TxOut, account uint32, minconf int3
 // into the database, rather than delegating this work to the caller as
 // btcwallet does.
 func (w *Wallet) txToOutputsInternal(outputs []*wire.TxOut, account uint32, minconf int32,
-	chainClient *dcrrpcclient.Client, randomizeChangeIdx bool, txFee dcrutil.Amount) (*txauthor.AuthoredTx, error) {
+	n NetworkBackend, randomizeChangeIdx bool, txFee dcrutil.Amount) (*txauthor.AuthoredTx, error) {
 
 	var atx *txauthor.AuthoredTx
 	var changeSourceUpdates []func(walletdb.ReadWriteTx) error
@@ -469,6 +483,11 @@ func (w *Wallet) txToOutputsInternal(outputs []*wire.TxOut, account uint32, minc
 			" %v from imported account into default account.", changeAmount)
 	}
 
+	err = w.checkHighFees(atx.TotalInput, atx.Tx)
+	if err != nil {
+		return nil, err
+	}
+
 	rec, err := udb.NewTxRecordFromMsgTx(atx.Tx, time.Now())
 	if err != nil {
 		return nil, err
@@ -491,8 +510,7 @@ func (w *Wallet) txToOutputsInternal(outputs []*wire.TxOut, account uint32, minc
 			return err
 		}
 
-		_, err = chainClient.SendRawTransaction(atx.Tx, w.AllowHighFees)
-		return err
+		return n.PublishTransaction(context.TODO(), atx.Tx)
 	})
 	if err != nil {
 		return nil, err
@@ -541,7 +559,7 @@ func (w *Wallet) txToMultisigInternal(dbtx walletdb.ReadWriteTx, account uint32,
 			return nil, nil, nil, err
 		}
 
-	chainClient, err := w.requireChainClient()
+	n, err := w.NetworkBackend()
 	if err != nil {
 		return txToMultisigError(err)
 	}
@@ -651,7 +669,12 @@ func (w *Wallet) txToMultisigInternal(dbtx walletdb.ReadWriteTx, account uint32,
 		return txToMultisigError(err)
 	}
 
-	_, err = chainClient.SendRawTransaction(msgtx, w.AllowHighFees)
+	err = w.checkHighFees(totalInput, msgtx)
+	if err != nil {
+		return txToMultisigError(err)
+	}
+
+	err = n.PublishTransaction(context.TODO(), msgtx)
 	if err != nil {
 		return txToMultisigError(err)
 	}
@@ -660,7 +683,7 @@ func (w *Wallet) txToMultisigInternal(dbtx walletdb.ReadWriteTx, account uint32,
 	// script hash address.
 	utilAddrs := make([]dcrutil.Address, 1)
 	utilAddrs[0] = scAddr
-	err = chainClient.LoadTxFilter(false, []dcrutil.Address{scAddr}, nil)
+	err = n.LoadTxFilter(context.TODO(), false, []dcrutil.Address{scAddr}, nil)
 	if err != nil {
 		return txToMultisigError(err)
 	}
@@ -723,7 +746,7 @@ func (w *Wallet) compressWalletInternal(dbtx walletdb.ReadWriteTx, maxNumIns int
 	addrmgrNs := dbtx.ReadWriteBucket(waddrmgrNamespaceKey)
 	txmgrNs := dbtx.ReadWriteBucket(wtxmgrNamespaceKey)
 
-	chainClient, err := w.requireChainClient()
+	n, err := w.NetworkBackend()
 	if err != nil {
 		return nil, err
 	}
@@ -809,7 +832,12 @@ func (w *Wallet) compressWalletInternal(dbtx walletdb.ReadWriteTx, maxNumIns int
 		return nil, err
 	}
 
-	txSha, err := chainClient.SendRawTransaction(msgtx, w.AllowHighFees)
+	err = w.checkHighFees(totalAdded, msgtx)
+	if err != nil {
+		return nil, err
+	}
+
+	err = n.PublishTransaction(context.TODO(), msgtx)
 	if err != nil {
 		return nil, err
 	}
@@ -824,9 +852,10 @@ func (w *Wallet) compressWalletInternal(dbtx walletdb.ReadWriteTx, maxNumIns int
 		return nil, err
 	}
 
-	log.Infof("Successfully consolidated funds in transaction %v", txSha)
+	txHash := msgtx.TxHash()
+	log.Infof("Successfully consolidated funds in transaction %v", &txHash)
 
-	return txSha, nil
+	return &txHash, nil
 }
 
 // makeTicket creates a ticket from a split transaction output. It can optionally
@@ -944,8 +973,13 @@ func makeTicket(params *chaincfg.Params, inputPool *extendedOutPoint,
 // wallet instance will be used.  Also, when the spend limit in the request is
 // greater than or equal to 0, tickets that cost more than that limit will
 // return an error that not enough funds are available.
+<<<<<<< HEAD
 func (w *Wallet) purchaseTicketsSplit(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
 	chainClient, err := w.requireChainClient()
+=======
+func (w *Wallet) purchaseTickets(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
+	n, err := w.NetworkBackend()
+>>>>>>> 2df4002bce8c540907c9a3e2980fc3e5deeba8f6
 	if err != nil {
 		return nil, err
 	}
@@ -976,12 +1010,8 @@ func (w *Wallet) purchaseTicketsSplit(req purchaseTicketRequest) ([]*chainhash.H
 	// address this better and prevent address burning.
 	account := req.account
 
-	// Get the current ticket price from the daemon.
-	ticketPricesF64, err := w.ChainClient().GetStakeDifficulty()
-	if err != nil {
-		return nil, err
-	}
-	ticketPrice, err := dcrutil.NewAmount(ticketPricesF64.NextStakeDifficulty)
+	// Get the current ticket price.
+	ticketPrice, err := n.StakeDifficulty(context.TODO())
 	if err != nil {
 		return nil, err
 	}
@@ -1114,7 +1144,7 @@ func (w *Wallet) purchaseTicketsSplit(req purchaseTicketRequest) ([]*chainhash.H
 		txFeeIncrement = w.RelayFee()
 	}
 	splitTx, err := w.txToOutputsInternal(splitOuts, account, req.minConf,
-		chainClient, false, txFeeIncrement)
+		n, false, txFeeIncrement)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send split transaction: %v", err)
 	}
@@ -1246,6 +1276,11 @@ func (w *Wallet) purchaseTicketsSplit(req purchaseTicketRequest) ([]*chainhash.H
 			return ticketHashes, err
 		}
 
+		err = w.checkHighFees(dcrutil.Amount(eop.amt), ticket)
+		if err != nil {
+			return nil, err
+		}
+
 		rec, err := udb.NewTxRecordFromMsgTx(ticket, time.Now())
 		if err != nil {
 			return ticketHashes, err
@@ -1253,19 +1288,18 @@ func (w *Wallet) purchaseTicketsSplit(req purchaseTicketRequest) ([]*chainhash.H
 
 		// Open a DB update to insert and publish the transaction.  If
 		// publishing fails, the update is rolled back.
-		var ticketHash *chainhash.Hash
 		err = walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
 			err = w.processTransactionRecord(dbtx, rec, nil, nil)
 			if err != nil {
 				return err
 			}
-			ticketHash, err = chainClient.SendRawTransaction(ticket, w.AllowHighFees)
-			return err
+			return n.PublishTransaction(context.TODO(), ticket)
 		})
 		if err != nil {
 			return ticketHashes, err
 		}
-		ticketHashes = append(ticketHashes, ticketHash)
+		ticketHash := ticket.TxHash()
+		ticketHashes = append(ticketHashes, &ticketHash)
 		log.Infof("Successfully sent SStx purchase transaction %v", ticketHash)
 	}
 
