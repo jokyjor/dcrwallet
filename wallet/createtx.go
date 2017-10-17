@@ -1498,9 +1498,6 @@ func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.
 		}
 	}
 
-	// Unlock wallet unlocks address manager 
-	w.UnlockWallet()
-
 	err = n.PublishTransaction(context.TODO(), tx.MsgTx)
 	if err != nil {
 		return nil, ErrClientPurchaseTicket
