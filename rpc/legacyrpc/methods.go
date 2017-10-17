@@ -1916,6 +1916,8 @@ func purchaseTicket(icmd interface{}, w *wallet.Wallet) (interface{}, error) {
 		}
 	}
 
+	fmt.Println(cmd)
+
 	// Set pool address if specified.
 	var poolAddr dcrutil.Address
 	var poolFee float64
@@ -1946,9 +1948,14 @@ func purchaseTicket(icmd interface{}, w *wallet.Wallet) (interface{}, error) {
 		expiry = int32(*cmd.Expiry)
 	}
 
+	noSplitTx := true
+	if cmd.NoSplitTransaction != nil {
+		noSplitTx = bool(*cmd.NoSplitTransaction)
+	}
+
 	hashes, err := w.PurchaseTickets(0, spendLimit, minConf, ticketAddr,
 		account, numTickets, poolAddr, poolFee, expiry, w.RelayFee(),
-		w.TicketFeeIncrement(), *cmd.NoSplitTransaction)
+		w.TicketFeeIncrement(), noSplitTx)
 	if err != nil {
 		return nil, err
 	}
