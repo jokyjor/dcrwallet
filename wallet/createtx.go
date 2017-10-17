@@ -7,8 +7,6 @@ package wallet
 
 import (
 	"context"
-	"encoding/binary"
-	"errors"
 	"fmt"
 	"time"
 	"errors"
@@ -973,13 +971,8 @@ func makeTicket(params *chaincfg.Params, inputPool *extendedOutPoint,
 // wallet instance will be used.  Also, when the spend limit in the request is
 // greater than or equal to 0, tickets that cost more than that limit will
 // return an error that not enough funds are available.
-<<<<<<< HEAD
 func (w *Wallet) purchaseTicketsSplit(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
-	chainClient, err := w.requireChainClient()
-=======
-func (w *Wallet) purchaseTickets(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
 	n, err := w.NetworkBackend()
->>>>>>> 2df4002bce8c540907c9a3e2980fc3e5deeba8f6
 	if err != nil {
 		return nil, err
 	}
@@ -1307,7 +1300,7 @@ func (w *Wallet) purchaseTickets(req purchaseTicketRequest) ([]*chainhash.Hash, 
 }
 
 func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
-	chainClient, err := w.requireChainClient()
+	n, err := w.NetworkBackend()
 	if err != nil {
 		return nil, err
 	}
@@ -1341,12 +1334,7 @@ func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.
 	    return nil, fmt.Errorf("pool address given, but pool fees not set")
 	}
 
-	ticketPricesF64, err := w.ChainClient().GetStakeDifficulty()
-	if err != nil {
-		return nil, err
-	}
-
-	ticketPrice, err := dcrutil.NewAmount(ticketPricesF64.NextStakeDifficulty)
+	ticketPrice, err := n.StakeDifficulty(context.TODO())
 	if err != nil {
 		return nil, err
 	}
@@ -1510,7 +1498,7 @@ func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.
 		}
 	}
 
-	ticketHash, err := chainClient.SendRawTransaction(tx.MsgTx, w.AllowHighFees)
+	err = n.PublishTransaction(context.TODO(), tx.MsgTx)
 	if err != nil {
 		return nil, ErrClientPurchaseTicket
 	}
@@ -1557,10 +1545,12 @@ func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.
 		return nil, err
 	}
 
+	ticketHash := tx.MsgTx.TxHash()
+
 	log.Infof("Successfully sent SStx purchase transaction %v", ticketHash)
 	// Func is expected to return a slice
 	ticketHashSlice := make([]*chainhash.Hash, 0)
-	ticketHashSlice = append(ticketHashSlice, ticketHash)
+	ticketHashSlice = append(ticketHashSlice, &ticketHash)
 
 	return ticketHashSlice, nil
 }
