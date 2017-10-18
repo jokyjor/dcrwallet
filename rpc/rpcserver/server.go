@@ -2022,6 +2022,17 @@ func (t *ticketbuyerServer) SetVotingAddress(ctx context.Context, req *pb.SetVot
 	return &pb.SetVotingAddressResponse{}, nil
 }
 
+//SetNoSplitTransaction sets the value of the nosplittrasnaction option
+func (t *ticketbuyerServer) SetNoSplitTransaction(ctx context.Context, req *pb.SetNoSplitTransactionRequest) (*pb.SetNoSplitTransactionResponse, error) {
+	pm, err := t.requirePurchaseManager()
+	if err != nil {
+		return nil, err
+	}
+
+	pm.Purchaser().SetNoSplitTransaction(req.NoSplitTransaction)
+	return &pb.SetNoSplitTransactionResponse{}, nil
+}
+
 // SetPoolAddress sets the pool address where ticket fees are sent.
 func (t *ticketbuyerServer) SetPoolAddress(ctx context.Context, req *pb.SetPoolAddressRequest) (
 	*pb.SetPoolAddressResponse, error) {
