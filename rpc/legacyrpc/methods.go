@@ -1916,8 +1916,6 @@ func purchaseTicket(icmd interface{}, w *wallet.Wallet) (interface{}, error) {
 		}
 	}
 
-	fmt.Println(cmd)
-
 	// Set pool address if specified.
 	var poolAddr dcrutil.Address
 	var poolFee float64
