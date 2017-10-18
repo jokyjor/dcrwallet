@@ -101,6 +101,7 @@ type TicketPurchaser struct {
 	stakeLive        uint32
 	stakeImmature    uint32
 	stakeVoteSubsidy dcrutil.Amount
+	noSplitTransaction bool
 
 	// purchaserMtx protects the following runtime configurable options.
 	purchaserMtx      sync.Mutex
@@ -262,6 +263,21 @@ func (t *TicketPurchaser) VotingAddress() dcrutil.Address {
 func (t *TicketPurchaser) SetVotingAddress(votingAddress dcrutil.Address) {
 	t.purchaserMtx.Lock()
 	t.votingAddress = votingAddress
+	t.purchaserMtx.Unlock()
+}
+
+// NoSplitTransaction returns the nosplittrasnaction config value
+func (t *TicketPurchaser) NoSplitTransaction() bool {
+	t.purchaserMtx.Lock()
+	noSplitTransaction := t.noSplitTransaction
+	t.purchaserMtx.Unlock()
+	return noSplitTransaction
+}
+
+// SetNoSplitTransaction sets the nosplittrasnaction option
+func (t *TicketPurchaser) SetNoSplitTransaction(noSplitTransaction bool) {
+	t.purchaserMtx.Lock()
+	t.noSplitTransaction = noSplitTransaction
 	t.purchaserMtx.Unlock()
 }
 
