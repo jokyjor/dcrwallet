@@ -7,11 +7,11 @@ package wallet
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"time"
-	"errors"
-	"encoding/binary"
-	"crypto/rand"
 
 	"github.com/decred/dcrd/blockchain"
 	"github.com/decred/dcrd/blockchain/stake"
@@ -186,7 +186,6 @@ var ErrSStxInputOverflow = errors.New("too many inputs to purchase ticket with")
 // ErrClientPurchaseTicket is the error returned when the daemon has
 // disconnected from the
 var ErrClientPurchaseTicket = errors.New("sendrawtransaction failed: the " + "client has been shutdown")
-
 
 // --------------------------------------------------------------------------------
 // Transaction creation
@@ -1324,14 +1323,14 @@ func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.
 	// the same for pool fees, but check sanity too.
 	poolAddress := req.poolAddress
 	if poolAddress == nil {
-	    poolAddress = w.PoolAddress()
+		poolAddress = w.PoolAddress()
 	}
 	poolFees := req.poolFees
 	if poolFees == 0.0 {
-	    poolFees = w.PoolFees()
+		poolFees = w.PoolFees()
 	}
 	if poolAddress != nil && poolFees == 0.0 {
-	    return nil, fmt.Errorf("pool address given, but pool fees not set")
+		return nil, fmt.Errorf("pool address given, but pool fees not set")
 	}
 
 	ticketPrice, err := n.StakeDifficulty(context.TODO())
@@ -1347,17 +1346,36 @@ func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.
 	var amountNeeded dcrutil.Amount
 	if poolAddress == nil {
 		ticketFee = (ticketFee * singleInputTicketSize) /
-		   1000
-	   amountNeeded = ticketFee + ticketPrice
+			1000
+		amountNeeded = ticketFee + ticketPrice
 	} else {
 		ticketFee = (ticketFee * doubleInputTicketSize) /
-		   1000
-	   amountNeeded = ticketFee + ticketPrice
+			1000
+		amountNeeded = ticketFee + ticketPrice
 	}
 
 	// Ensure the ticket price does not exceed the spend limit if set
 	if req.spendLimit >= 0 && ticketPrice > req.spendLimit {
 		return nil, ErrSStxPriceExceedsSpendLimit
+	}
+
+	if req.minBalance > 0 {
+		bal, err := w.CalculateAccountBalance(req.account, req.minConf)
+		if err != nil {
+			return nil, err
+		}
+
+		estimatedFundsUsed := amountNeeded * dcrutil.Amount(req.numTickets)
+		if req.minBalance+estimatedFundsUsed > bal.Spendable {
+			notEnoughFundsStr := fmt.Sprintf("not enough funds; balance to "+
+				"maintain is %v and estimated cost is %v (resulting in %v "+
+				"funds needed) but wallet account %v only has %v",
+				req.minBalance.ToCoin(), estimatedFundsUsed.ToCoin(),
+				req.minBalance.ToCoin()+estimatedFundsUsed.ToCoin(),
+				req.account, bal.Spendable.ToCoin())
+			log.Debugf("%s", notEnoughFundsStr)
+			return nil, txauthor.InsufficientFundsError{}
+		}
 	}
 
 	ticketAddress := req.ticketAddr
@@ -1376,183 +1394,156 @@ func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.
 		}
 	}
 
-	// Create Address/Amount Pair
-	addrAmountPair := map[string]dcrutil.Amount{
-		ticketAddress.String(): ticketPrice,
-	}
+	ticketHashes := make([]*chainhash.Hash, 0, req.numTickets)
+	for i := 0; i < req.numTickets; i++ {
+		// Create Address/Amount Pair
+		addrAmountPair := map[string]dcrutil.Amount{
+			ticketAddress.String(): ticketPrice,
+		}
 
-	var eligibleOutputs []udb.Credit
-	err = walletdb.View(w.db, func(dbtx walletdb.ReadTx) error {
-		eligibleOutputs, err = w.findEligibleOutputsAmount(dbtx, req.account, req.minConf, amountNeeded, tipHeight)
-		return err
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	if len(eligibleOutputs) == 0 {
-		return nil, ErrSStxNotEnoughFunds
-	}
-	if len(eligibleOutputs) > stake.MaxInputsPerSStx {
-		return nil, ErrSStxInputOverflow
-	}
-
-	outs := []dcrjson.SStxCommitOut{}
-	inputs := []dcrjson.SStxInput{}
-	usedCredits := []udb.Credit{}
-	inputSum := int64(0)
-	outputSum := int64(0)
-	for i, credit := range eligibleOutputs {
-		var newAddress dcrutil.Address
-		err = walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
-			newAddress, err = addrFunc(w.persistReturnedChild(dbtx), req.account)
+		var eligibleOutputs []udb.Credit
+		err = walletdb.View(w.db, func(dbtx walletdb.ReadTx) error {
+			eligibleOutputs, err = w.findEligibleOutputsAmount(dbtx, req.account, req.minConf, amountNeeded, tipHeight)
 			return err
 		})
+
 		if err != nil {
 			return nil, err
 		}
 
-		creditAmount := int64(credit.Amount)
-		inputSum += creditAmount
-
-		newInput := dcrjson.SStxInput{
-			Txid: credit.Hash.String(),
-			Vout: credit.Index,
-			Tree: credit.Tree,
-			Amt:  creditAmount,
+		if len(eligibleOutputs) == 0 {
+			return nil, ErrSStxNotEnoughFunds
+		}
+		if len(eligibleOutputs) > stake.MaxInputsPerSStx {
+			return nil, ErrSStxInputOverflow
 		}
 
-		inputs = append(inputs, newInput)
-		usedCredits = append(usedCredits, credit)
-
-		// All credits used that are not the last credit.
-		if outputSum+creditAmount <= int64(ticketPrice) {
-			// Use a random address if the change amount is
-			// unspendable. This is the case if it's not
-			// the last credit.
-			newChangeAddress, err := randomAddress(w.chainParams)
+		outs := []dcrjson.SStxCommitOut{}
+		inputs := []dcrjson.SStxInput{}
+		usedCredits := []udb.Credit{}
+		inputSum := int64(0)
+		outputSum := int64(0)
+		for i, credit := range eligibleOutputs {
+			var newAddress dcrutil.Address
+			err = walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
+				newAddress, err = addrFunc(w.persistReturnedChild(dbtx), req.account)
+				return err
+			})
 			if err != nil {
 				return nil, err
 			}
 
-			cout := dcrjson.SStxCommitOut{
-				Addr:       newAddress.String(),
-				CommitAmt:  creditAmount,
-				ChangeAddr: newChangeAddress.String(),
-				ChangeAmt:  0,
-			}
-			outs = append(outs, cout)
-			outputSum += creditAmount
-		} else {
-			// We've gone over what we needed to use and
-			// so we'll have to change to pop in the
-			// last output.
+			creditAmount := int64(credit.Amount)
+			inputSum += creditAmount
 
-			estSize := estimateSSTxSize(i)
-			var feeIncrement dcrutil.Amount
-			feeIncrement = w.TicketFeeIncrement()
-
-			fee := feeForSize(feeIncrement, estSize)
-
-			// Not enough funds after taking fee into account.
-			// Should retry instead of failing, Decred TODO
-			totalWithThisCredit := creditAmount + outputSum
-			if (totalWithThisCredit - int64(fee) - int64(ticketPrice)) < 0 {
-				return nil, ErrSStxNotEnoughFunds
+			newInput := dcrjson.SStxInput{
+				Txid: credit.Hash.String(),
+				Vout: credit.Index,
+				Tree: credit.Tree,
+				Amt:  creditAmount,
 			}
 
-			remaining := int64(ticketPrice) - outputSum
-			change := creditAmount - remaining - int64(fee)
+			inputs = append(inputs, newInput)
+			usedCredits = append(usedCredits, credit)
 
-			var newChangeAddress dcrutil.Address
-			err = walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
-				newChangeAddress, err = addrFunc(w.persistReturnedChild(dbtx), req.account)
-				return err
-			})
+			// All credits used that are not the last credit.
+			if outputSum+creditAmount <= int64(ticketPrice) {
+				// Use a random address if the change amount is
+				// unspendable. This is the case if it's not
+				// the last credit.
+				newChangeAddress, err := randomAddress(w.chainParams)
+				if err != nil {
+					return nil, err
+				}
 
-			out := dcrjson.SStxCommitOut{
-				Addr:       newAddress.String(),
-				CommitAmt:  creditAmount - change,
-				ChangeAddr: newChangeAddress.String(),
-				ChangeAmt:  change,
+				cout := dcrjson.SStxCommitOut{
+					Addr:       newAddress.String(),
+					CommitAmt:  creditAmount,
+					ChangeAddr: newChangeAddress.String(),
+					ChangeAmt:  0,
+				}
+				outs = append(outs, cout)
+				outputSum += creditAmount
+			} else {
+				// We've gone over what we needed to use and
+				// so we'll have to change to pop in the
+				// last output.
+
+				estSize := estimateSSTxSize(i)
+				var feeIncrement dcrutil.Amount
+				feeIncrement = w.TicketFeeIncrement()
+
+				fee := feeForSize(feeIncrement, estSize)
+
+				// Not enough funds after taking fee into account.
+				// Should retry instead of failing, Decred TODO
+				totalWithThisCredit := creditAmount + outputSum
+				if (totalWithThisCredit - int64(fee) - int64(ticketPrice)) < 0 {
+					return nil, ErrSStxNotEnoughFunds
+				}
+
+				remaining := int64(ticketPrice) - outputSum
+				change := creditAmount - remaining - int64(fee)
+
+				var newChangeAddress dcrutil.Address
+				err = walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
+					newChangeAddress, err = addrFunc(w.persistReturnedChild(dbtx), req.account)
+					return err
+				})
+
+				out := dcrjson.SStxCommitOut{
+					Addr:       newAddress.String(),
+					CommitAmt:  creditAmount - change,
+					ChangeAddr: newChangeAddress.String(),
+					ChangeAmt:  change,
+				}
+				outs = append(outs, out)
+				outputSum += remaining + change
+
+				break
 			}
-			outs = append(outs, out)
-			outputSum += remaining + change
-
-			break
 		}
-	}
 
-	if len(inputs) == 0 {
-		return nil, ErrSStxNotEnoughFunds
-	}
-
-	tx, err := w.txToSStx(addrAmountPair, usedCredits, inputs, outs, req.account, req.minConf)
-	if err != nil {
-		switch {
-		case err == ErrNonPositiveAmount:
-			return nil, fmt.Errorf("Need positive amount")
-		default:
-			return nil, err
+		if len(inputs) == 0 {
+			return nil, ErrSStxNotEnoughFunds
 		}
-	}
 
-	err = n.PublishTransaction(context.TODO(), tx.MsgTx)
-	if err != nil {
-		return nil, ErrClientPurchaseTicket
-	}
-
-	// Insert the transaction and credits into the transaction manager.
-	err = walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
-		var err error
-		var rec *udb.TxRecord
-
-		rwBucket := dbtx.ReadWriteBucket(wtxmgrNamespaceKey)
-		rec, err = w.insertIntoTxMgr(rwBucket, tx.MsgTx)
-
+		// Create simple transaction
+		tx, err := w.txToSStx(addrAmountPair, usedCredits, inputs, outs, req.account, req.minConf)
 		if err != nil {
-			return err
+			switch {
+			case err == ErrNonPositiveAmount:
+				return nil, fmt.Errorf("Need positive amount")
+			default:
+				return nil, err
+			}
 		}
 
-		err = w.insertCreditsIntoTxMgr(dbtx, tx.MsgTx, rec)
-		return err
-	})
+		// Create transaction record
+		rec, err := udb.NewTxRecordFromMsgTx(tx.MsgTx, time.Now())
+		if err != nil {
+			return ticketHashes, err
+		}
 
-	if err != nil {
-		return nil, err
+		// Open db to insert and publish the transaction
+		err = walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
+			err = w.processTransactionRecord(dbtx, rec, nil, nil)
+			if err != nil {
+				return err
+			}
+			return n.PublishTransaction(context.TODO(), tx.MsgTx)
+		})
+		if err != nil {
+			return ticketHashes, err
+		}
+
+		ticketHash := tx.MsgTx.TxHash()
+		ticketHashes = append(ticketHashes, &ticketHash)
+
+		log.Infof("Successfully sent SStx purchase transaction %v", ticketHash)
 	}
 
-	txTemp := dcrutil.NewTx(tx.MsgTx)
-	// The ticket address may be for another wallet. Don't insert the
-	// ticket into the stake manager unless we actually own output zero
-	// of it. If this is the case, the chainntfns.go handlers will
-	// automatically insert it.
-	err = walletdb.View(w.db, func(dbtx walletdb.ReadTx) error {
-		rBucket := dbtx.ReadBucket(waddrmgrNamespaceKey)
-		_, err := w.Manager.Address(rBucket, ticketAddress)
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	err = walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
-		rwBucket := dbtx.ReadWriteBucket(waddrmgrNamespaceKey)
-		return w.StakeMgr.InsertSStx(rwBucket, txTemp)
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	ticketHash := tx.MsgTx.TxHash()
-
-	log.Infof("Successfully sent SStx purchase transaction %v", ticketHash)
-	// Func is expected to return a slice
-	ticketHashSlice := make([]*chainhash.Hash, 0)
-	ticketHashSlice = append(ticketHashSlice, &ticketHash)
-
-	return ticketHashSlice, nil
+	return ticketHashes, nil
 }
 
 // purchaseTickets calls the purchaseTicketsSplit or purchaseTicketsSimple functons
@@ -2197,7 +2188,6 @@ func createUnsignedRevocation(ticketHash *chainhash.Hash, ticketPurchase *wire.M
 	}
 	return nil, errors.New("no suitable revocation outputs to pay relay fee")
 }
-
 
 // sanityCheckExpiry performs a sanity check on expiry
 // returns  tipHeight and error
