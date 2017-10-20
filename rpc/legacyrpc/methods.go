@@ -1946,7 +1946,7 @@ func purchaseTicket(icmd interface{}, w *wallet.Wallet) (interface{}, error) {
 		expiry = int32(*cmd.Expiry)
 	}
 
-	noSplitTx := true
+	noSplitTx := false
 	if cmd.NoSplitTransaction != nil {
 		noSplitTx = bool(*cmd.NoSplitTransaction)
 	}
