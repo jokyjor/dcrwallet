@@ -67,6 +67,7 @@ const (
 	defaultBalanceToMaintainAbsolute                = 0
 	defaultBalanceToMaintainRelative                = 0.3
 	defaultNoSplitTransaction                       = false
+	defaultPurchaseTicketsSingleTransaction                = false
 
 	walletDbName = "wallet.db"
 )
@@ -181,6 +182,7 @@ type ticketBuyerOptions struct {
 	DontWaitForTickets        bool                 `long:"dontwaitfortickets" description:"Don't wait until your last round of tickets have entered the blockchain to attempt to purchase more"`
 	NoSplitTransaction        bool                 `long:"nosplittransaction" description:"Do not use split transaction when purchasing tickets"`
 	VotingAddress             *cfgutil.AddressFlag `long:"votingaddress" description:"Purchase tickets with voting rights assigned to this address"`
+	PurchaseTicketsSingleTransaction bool                 `long:"purchaseticketssingletransaction" description:"Purchase tickets in a single transaction"`
 
 	// Deprecated options
 	MaxPriceScale         float64             `long:"maxpricescale" description:"DEPRECATED -- Attempt to prevent the stake difficulty from going above this multiplier (>1.0) by manipulation, 0 to disable"`
@@ -382,6 +384,7 @@ func loadConfig(ctx context.Context) (*config, []string, error) {
 			BalanceToMaintainRelative: defaultBalanceToMaintainRelative,
 			NoSplitTransaction:        defaultNoSplitTransaction,
 			VotingAddress:             cfgutil.NewAddressFlag(nil),
+				PurchaseTicketsSingleTransaction: defaultPurchaseTicketsSingleTransaction,
 		},
 	}
 
@@ -935,6 +938,7 @@ func loadConfig(ctx context.Context) (*config, []string, error) {
 		VotingAddress:             votingAddress,
 		TxFee:                     int64(cfg.RelayFee.Amount),
 		NoSplitTransaction:        cfg.TBOpts.NoSplitTransaction,
+		PurchaseTicketsSingleTransaction: cfg.TBOpts.PurchaseTicketsSingleTransaction,
 	}
 
 	// Make list of old versions of testnet directories.
