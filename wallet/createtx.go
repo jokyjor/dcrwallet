@@ -964,6 +964,15 @@ func makeTicket(params *chaincfg.Params, inputPool *extendedOutPoint,
 	return mtx, nil
 }
 
+func makeTickets(params *chaincfg.Params, inputPool *extendedOutPoint,
+	input *extendedOutPoint, addrVote dcrutil.Address, addrSubsidy dcrutil.Address,
+	ticketCost int64, addrPool dcrutil.Address, numTickets int) ([]*wire.MsgTx, error) {
+
+
+
+	return nil, nil
+}
+
 // purchaseTickets indicates to the wallet that a ticket should be purchased
 // using all currently available funds.  The ticket address parameter in the
 // request can be nil in which case the ticket address associated with the
