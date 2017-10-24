@@ -56,52 +56,54 @@ const (
 
 // Config stores the configuration options for ticket buyer.
 type Config struct {
-	AccountName               string
-	AvgPriceMode              string
-	AvgPriceVWAPDelta         int
-	BalanceToMaintainAbsolute int64
-	BalanceToMaintainRelative float64
-	BlocksToAvg               int
-	DontWaitForTickets        bool
-	ExpiryDelta               int
-	FeeSource                 string
-	FeeTargetScaling          float64
-	MinFee                    int64
-	MaxFee                    int64
-	MaxPerBlock               int
-	MaxPriceAbsolute          int64
-	MaxPriceRelative          float64
-	MaxInMempool              int
-	PoolAddress               dcrutil.Address
-	PoolFees                  float64
-	NoSpreadTicketPurchases   bool
-	VotingAddress             dcrutil.Address
-	TxFee                     int64
-	NoSplitTransaction        bool
+	AccountName                      string
+	AvgPriceMode                     string
+	AvgPriceVWAPDelta                int
+	BalanceToMaintainAbsolute        int64
+	BalanceToMaintainRelative        float64
+	BlocksToAvg                      int
+	DontWaitForTickets               bool
+	ExpiryDelta                      int
+	FeeSource                        string
+	FeeTargetScaling                 float64
+	MinFee                           int64
+	MaxFee                           int64
+	MaxPerBlock                      int
+	MaxPriceAbsolute                 int64
+	MaxPriceRelative                 float64
+	MaxInMempool                     int
+	PoolAddress                      dcrutil.Address
+	PoolFees                         float64
+	NoSpreadTicketPurchases          bool
+	VotingAddress                    dcrutil.Address
+	TxFee                            int64
+	NoSplitTransaction               bool
+	PurchaseTicketsSingleTransaction bool
 }
 
 // TicketPurchaser is the main handler for purchasing tickets. It decides
 // whether or not to do so based on information obtained from daemon and
 // wallet chain servers.
 type TicketPurchaser struct {
-	cfg                *Config
-	activeNet          *chaincfg.Params
-	dcrdChainSvr       *dcrrpcclient.Client
-	wallet             *wallet.Wallet
-	votingAddress      dcrutil.Address
-	poolAddress        dcrutil.Address
-	firstStart         bool
-	windowPeriod       int          // The current window period
-	idxDiffPeriod      int          // Relative block index within the difficulty period
-	useMedian          bool         // Flag for using median for ticket fees
-	priceMode          avgPriceMode // Price mode to use to calc average price
-	heightCheck        map[int64]struct{}
-	ticketPrice        dcrutil.Amount
-	stakePoolSize      uint32
-	stakeLive          uint32
-	stakeImmature      uint32
-	stakeVoteSubsidy   dcrutil.Amount
-	noSplitTransaction bool
+	cfg                              *Config
+	activeNet                        *chaincfg.Params
+	dcrdChainSvr                     *dcrrpcclient.Client
+	wallet                           *wallet.Wallet
+	votingAddress                    dcrutil.Address
+	poolAddress                      dcrutil.Address
+	firstStart                       bool
+	windowPeriod                     int          // The current window period
+	idxDiffPeriod                    int          // Relative block index within the difficulty period
+	useMedian                        bool         // Flag for using median for ticket fees
+	priceMode                        avgPriceMode // Price mode to use to calc average price
+	heightCheck                      map[int64]struct{}
+	ticketPrice                      dcrutil.Amount
+	stakePoolSize                    uint32
+	stakeLive                        uint32
+	stakeImmature                    uint32
+	stakeVoteSubsidy                 dcrutil.Amount
+	noSplitTransaction               bool
+	purchaseTicketsSingleTransaction bool
 
 	// purchaserMtx protects the following runtime configurable options.
 	purchaserMtx      sync.Mutex
@@ -144,9 +146,10 @@ func (t *TicketPurchaser) Config() (*Config, error) {
 		PoolAddress:               t.cfg.PoolAddress,
 		PoolFees:                  t.poolFees,
 		NoSpreadTicketPurchases:   t.cfg.NoSpreadTicketPurchases,
-		TxFee:              t.cfg.TxFee,
-		VotingAddress:      t.cfg.VotingAddress,
-		NoSplitTransaction: t.cfg.NoSplitTransaction,
+		TxFee:                            t.cfg.TxFee,
+		VotingAddress:                    t.cfg.VotingAddress,
+		NoSplitTransaction:               t.cfg.NoSplitTransaction,
+		PurchaseTicketsSingleTransaction: t.cfg.PurchaseTicketsSingleTransaction,
 	}
 	t.purchaserMtx.Unlock()
 	return config, nil
@@ -278,6 +281,21 @@ func (t *TicketPurchaser) NoSplitTransaction() bool {
 func (t *TicketPurchaser) SetNoSplitTransaction(noSplitTransaction bool) {
 	t.purchaserMtx.Lock()
 	t.noSplitTransaction = noSplitTransaction
+	t.purchaserMtx.Unlock()
+}
+
+// PurchaseTicketsSingleTransaction returns the PurchaseTicketsSingleTransaction config value
+func (t *TicketPurchaser) PurchaseTicketsSingleTransaction() bool {
+	t.purchaserMtx.Lock()
+	purchaseTicketsSingleTransaction := t.purchaseTicketsSingleTransaction
+	t.purchaserMtx.Unlock()
+	return purchaseTicketsSingleTransaction
+}
+
+// PurchaseTicketsSingleTransaction sets the PurchaseTicketsSingleTransaction option
+func (t *TicketPurchaser) SetPurchaseTicketsSingleTransaction(purchaseTicketsSingleTransaction bool) {
+	t.purchaserMtx.Lock()
+	t.purchaseTicketsSingleTransaction = purchaseTicketsSingleTransaction
 	t.purchaserMtx.Unlock()
 }
 
@@ -852,6 +870,7 @@ func (t *TicketPurchaser) Purchase(height int64) (*PurchaseStats, error) {
 		t.wallet.RelayFee(),
 		t.wallet.TicketFeeIncrement(),
 		t.cfg.NoSplitTransaction,
+		t.cfg.PurchaseTicketsSingleTransaction,
 	)
 	for i := range hashes {
 		log.Infof("Purchased ticket %v at stake difficulty %v (%v "+
