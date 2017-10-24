@@ -79,6 +79,7 @@ service TicketBuyerService {
     rpc SetPoolFees (SetPoolFeesRequest) returns (SetPoolFeesResponse);
     rpc SetMaxPerBlock (SetMaxPerBlockRequest) returns (SetMaxPerBlockResponse);
 	rpc SetNoSplitTransaction (SetNoSplitTransactionRequest) returns (SetNoSplitTransactionResponse);
+	rpc SetPurchaseTicketsSingleTransaction (SetPurchaseTicketsSingleTransactionRequest) returns (SetPurchaseTicketsSingleTransactionResponse);
 }
 
 service SeedService {
@@ -682,6 +683,11 @@ message SetNoSplitTransactionRequest{
 	bool no_split_transaction = 1;
 }
 message SetNoSplitTransactionResponse{}
+
+message SetPurchaseTicketsSingleTransactionRequest{
+	bool purchase_tickets_single_transaction = 1;
+}
+message SetPurchaseTicketsSingleTransactionResponse{}
 
 message SetPoolAddressRequest{
     string pool_address = 1;
