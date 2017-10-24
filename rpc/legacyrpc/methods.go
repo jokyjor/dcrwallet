@@ -1951,9 +1951,14 @@ func purchaseTicket(icmd interface{}, w *wallet.Wallet) (interface{}, error) {
 		noSplitTx = bool(*cmd.NoSplitTransaction)
 	}
 
+	purchaseTicketsSingleTx := false
+	if cmd.PurchaseTicketsSingleTransaction != nil {
+		purchaseTicketsSingleTx = bool(*cmd.PurchaseTicketsSingleTransaction)
+	}
+
 	hashes, err := w.PurchaseTickets(0, spendLimit, minConf, ticketAddr,
 		account, numTickets, poolAddr, poolFee, expiry, w.RelayFee(),
-		w.TicketFeeIncrement(), noSplitTx)
+		w.TicketFeeIncrement(), noSplitTx, purchaseTicketsSingleTx)
 	if err != nil {
 		return nil, err
 	}
