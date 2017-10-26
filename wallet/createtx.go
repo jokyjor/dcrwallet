@@ -1298,6 +1298,27 @@ func (w *Wallet) purchaseTicketsSplit(req purchaseTicketRequest) ([]*chainhash.H
 	return ticketHashes, nil
 }
 
+// processTxRecordAndPublish creates a transaction record, inserts the record
+// in the walletdb and publishes the transaction over the decred network
+func (w *Wallet) processTxRecordAndPublish(tx *wire.MsgTx, n NetworkBackend) error {
+	// Create transaction record
+	rec, err := udb.NewTxRecordFromMsgTx(tx, time.Now())
+	if err != nil {
+		return err
+	}
+
+	// Open db to insert and publish the transaction
+	err = walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
+		err := w.processTransactionRecord(dbtx, rec, nil, nil)
+		if err != nil {
+			return err
+		}
+		return n.PublishTransaction(context.TODO(), tx)
+	})
+
+	return err
+}
+
 func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
 	n, err := w.NetworkBackend()
 	if err != nil {
