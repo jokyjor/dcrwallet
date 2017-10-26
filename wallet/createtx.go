@@ -1319,7 +1319,6 @@ func (w *Wallet) processTxRecordAndPublish(tx *wire.MsgTx, n NetworkBackend) err
 	return err
 }
 
-
 // fetchAddresses returns a voting address. It checks if an address
 // was passed along with the request. if none was passed, it checks
 // for an address stored in configuration. If it finds none, it generates
@@ -1353,6 +1352,29 @@ func (w *Wallet) fetchAddresses(ticketAddress dcrutil.Address,
 	}
 
 	return addr, saddr, nil
+}
+
+// findEligibleOutputCredits abstracts the call to the findEligibleOutputsAmount func
+// it checks for possible errors and handles accordingly
+func (w *Wallet) findEligibleOutputCredits(account uint32, minConf int32, amountNeeded dcrutil.Amount, tipheight int32) ([]udb.Credit, error) {
+	var eligible []udb.Credit
+	err := walletdb.View(w.db, func(dbtx walletdb.ReadTx) error {
+		var err error
+		eligible, err = w.findEligibleOutputsAmount(dbtx, account, minConf, amountNeeded, tipheight)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(eligible) == 0 {
+		return nil, ErrSStxNotEnoughFunds
+	}
+	if len(eligible) > stake.MaxInputsPerSStx {
+		return nil, ErrSStxInputOverflow
+	}
+
+	return eligible, nil
 }
 
 func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
