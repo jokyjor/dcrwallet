@@ -1343,16 +1343,10 @@ func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.
 		ticketFee = w.TicketFeeIncrement()
 	}
 
-	var amountNeeded dcrutil.Amount
-	if poolAddress == nil {
-		ticketFee = (ticketFee * singleInputTicketSize) /
-			1000
-		amountNeeded = ticketFee + ticketPrice
-	} else {
-		ticketFee = (ticketFee * doubleInputTicketSize) /
-			1000
-		amountNeeded = ticketFee + ticketPrice
-	}
+	var estFee dcrutil.Amount
+	estFee = EstMaxTicketFeeAmount
+
+	amountNeeded := req.minBalance + ticketPrice + estFee
 
 	// Ensure the ticket price does not exceed the spend limit if set
 	if req.spendLimit >= 0 && ticketPrice > req.spendLimit {
@@ -1393,6 +1387,8 @@ func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.
 			}
 		}
 	}
+
+	feePerKB := txrules.DefaultRelayFeePerKb
 
 	ticketHashes := make([]*chainhash.Hash, 0, req.numTickets)
 	for i := 0; i < req.numTickets; i++ {
@@ -1470,10 +1466,11 @@ func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.
 				// last output.
 
 				estSize := estimateSSTxSize(i)
-				var feeIncrement dcrutil.Amount
-				feeIncrement = w.TicketFeeIncrement()
+				//var feeIncrement dcrutil.Amount
+				//feeIncrement = w.TicketFeeIncrement()
 
-				fee := feeForSize(feeIncrement, estSize)
+				//fee := feeForSize(feeIncrement, estSize)
+				fee := txrules.FeeForSerializeSize(feePerKB, estSize)
 
 				// Not enough funds after taking fee into account.
 				// Should retry instead of failing, Decred TODO
@@ -1743,6 +1740,8 @@ func (w *Wallet) txToSStxInternal(dbtx walletdb.ReadWriteTx, pair map[string]dcr
 		ChangeAddr:  nil,
 		ChangeIndex: -1,
 	}
+
+	fmt.Println(len(msgtx.TxOut))
 
 	// TODO: Add to the stake manager
 
