@@ -1377,6 +1377,25 @@ func (w *Wallet) findEligibleOutputCredits(account uint32, minConf int32, amount
 	return eligible, nil
 }
 
+// signAndValidateTicket signs the passed msgtx and performs validation checks
+func (w *Wallet) signAndValidateTicket(ticket *wire.MsgTx, forSigning []udb.Credit, eop *extendedOutPoint) error {
+	err := walletdb.View(w.db, func(dbtx walletdb.ReadTx) error {
+		ns := dbtx.ReadBucket(waddrmgrNamespaceKey)
+		return signMsgTx(ticket, forSigning, w.Manager, ns, w.chainParams)
+	})
+	if err != nil {
+		return err
+	}
+
+	err = validateMsgTxCredits(ticket, forSigning)
+	if err != nil {
+		return err
+	}
+
+	err = w.checkHighFees(dcrutil.Amount(eop.amt), ticket)
+	return err
+}
+
 func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
 	n, err := w.NetworkBackend()
 	if err != nil {
