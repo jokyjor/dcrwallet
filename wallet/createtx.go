@@ -1480,7 +1480,7 @@ func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.
 	}
 
 	// Perform sanity check on enquiry
-	_, err := w.sanityCheckExpiry(req.expiry)
+	_, err = w.sanityCheckExpiry(req.expiry)
 	if err != nil {
 		return nil, err
 	}
