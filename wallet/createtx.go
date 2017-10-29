@@ -1396,6 +1396,78 @@ func (w *Wallet) signAndValidateTicket(ticket *wire.MsgTx, forSigning []udb.Cred
 	return err
 }
 
+// buildTicketTx builds a raw SStx transaction.
+
+// NOTE this function requires that the caller passes an already created
+// msgtx. The job of this function is to build tx inputs
+// and outputs on the msgtx. As such, calling this function with
+// a single msgtx in a loop builds multiple tickets in a single tx as
+// opposed to creating a new tx upon every call
+func (w *Wallet) buildTicketTx(msgtx *wire.MsgTx, ticketCost dcrutil.Amount,
+	votingAddress dcrutil.Address, subsidyAddr dcrutil.Address,
+	eop *extendedOutPoint) ([]byte, error) {
+
+	var eopPkScript []byte
+	err := walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
+		var err error
+		eopPkScript, err = w.buildTicketTxInternal(dbtx, msgtx, ticketCost, votingAddress, subsidyAddr, eop)
+		return err
+	})
+
+	return eopPkScript, err
+}
+
+func (w *Wallet) buildTicketTxInternal(dbtx walletdb.ReadWriteTx, msgtx *wire.MsgTx, ticketCost dcrutil.Amount,
+	votingAddress dcrutil.Address, subsidyAddr dcrutil.Address,
+	eop *extendedOutPoint) ([]byte, error) {
+
+	op := eop.op
+
+	pkScript, err := txscript.PayToSStx(votingAddress)
+	eopPkScript := pkScript
+	if err != nil {
+		return eopPkScript, fmt.Errorf("cannot create txout script: %s", err)
+	}
+
+	txout := wire.NewTxOut(int64(ticketCost), pkScript)
+	msgtx.AddTxOut(txout)
+
+	txin := wire.NewTxIn(op, []byte{})
+	msgtx.AddTxIn(txin)
+
+	_, committedAmount, err := stake.SStxNullOutputAmounts(
+		[]int64{int64(ticketCost)}, []int64{0}, int64(ticketCost))
+	if err != nil {
+		return eopPkScript, err
+	}
+
+	limits := uint16(0x5800)
+	pkScript, err = txscript.GenerateSStxAddrPush(subsidyAddr,
+		dcrutil.Amount(committedAmount[0]), limits)
+	if err != nil {
+		return eopPkScript, fmt.Errorf("cannot create txout script: %s", err)
+	}
+	txout = wire.NewTxOut(int64(0), pkScript)
+	msgtx.AddTxOut(txout)
+
+	changeAddr, err := w.newChangeAddress(w.persistReturnedChild(dbtx), udb.DefaultAccountNum)
+	if err != nil {
+		return eopPkScript, err
+	}
+
+	// Create a new script which pays to the provided address with an
+	// SStx change tagged output.
+	pkScript, err = txscript.PayToSStxChange(changeAddr)
+	if err != nil {
+		return eopPkScript, err
+	}
+	txout = wire.NewTxOut(0, pkScript)
+	txout.Version = txscript.DefaultScriptVersion
+	msgtx.AddTxOut(txout)
+
+	return eopPkScript, nil
+}
+
 func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
 	n, err := w.NetworkBackend()
 	if err != nil {
