@@ -1480,7 +1480,7 @@ func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.
 	}
 
 	// Perform sanity check on enquiry
-	tipHeight, err := w.sanityCheckExpiry(req.expiry)
+	_, err := w.sanityCheckExpiry(req.expiry)
 	if err != nil {
 		return nil, err
 	}
@@ -1542,171 +1542,62 @@ func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.
 		}
 	}
 
-	ticketAddress := req.ticketAddr
-	if ticketAddress == nil {
-		if w.ticketAddress != nil {
-			ticketAddress = w.ticketAddress
-		} else {
-			err = walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
-				var err error
-				ticketAddress, err = addrFunc(w.persistReturnedChild(dbtx), req.account)
-				return err
-			})
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	feePerKB := txrules.DefaultRelayFeePerKb
-
 	ticketHashes := make([]*chainhash.Hash, 0, req.numTickets)
+
+	var votingAddresses, subsidyAddresses []dcrutil.Address
+	var outpoints []*extendedOutPoint
+
 	for i := 0; i < req.numTickets; i++ {
-		// Create Address/Amount Pair
-		addrAmountPair := map[string]dcrutil.Amount{
-			ticketAddress.String(): ticketPrice,
-		}
-
-		var eligibleOutputs []udb.Credit
-		err = walletdb.View(w.db, func(dbtx walletdb.ReadTx) error {
-			eligibleOutputs, err = w.findEligibleOutputsAmount(dbtx, req.account, req.minConf, amountNeeded, tipHeight)
-			return err
-		})
-
+		votingAddress, subsidyAddress, err := w.fetchAddresses(req.ticketAddr, req.account, addrFunc)
 		if err != nil {
 			return nil, err
 		}
 
-		if len(eligibleOutputs) == 0 {
-			return nil, ErrSStxNotEnoughFunds
+		votingAddresses = append(votingAddresses, votingAddress)
+		subsidyAddresses = append(subsidyAddresses, subsidyAddress)
+
+		eop := &extendedOutPoint{
+			op:  wire.NewOutPoint(&chainhash.Hash{}, uint32(i), wire.TxTreeRegular),
+			amt: int64(amountNeeded),
 		}
-		if len(eligibleOutputs) > stake.MaxInputsPerSStx {
-			return nil, ErrSStxInputOverflow
+		outpoints = append(outpoints, eop)
+	}
+
+	msgtx := wire.NewMsgTx()
+	for i := 0; i < req.numTickets; i++ {
+		var forSigning []udb.Credit
+		eopPkScript, err := w.buildTicketTx(msgtx, amountNeeded, votingAddresses[i], subsidyAddresses[i], outpoints[i])
+		if err != nil {
+			return nil, err
 		}
 
-		outs := []dcrjson.SStxCommitOut{}
-		inputs := []dcrjson.SStxInput{}
-		usedCredits := []udb.Credit{}
-		inputSum := int64(0)
-		outputSum := int64(0)
-		for i, credit := range eligibleOutputs {
-			var newAddress dcrutil.Address
-			err = walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
-				newAddress, err = addrFunc(w.persistReturnedChild(dbtx), req.account)
-				return err
-			})
+		eopCredit := udb.Credit{
+			OutPoint:  *outpoints[i].op,
+			BlockMeta: udb.BlockMeta{},
+			Amount:    amountNeeded,
+			PkScript:  eopPkScript,
+		}
+		forSigning = append(forSigning, eopCredit)
+
+		if !req.purchaseTicketsSingleTransaction {
+			msgtx.Expiry = uint32(req.expiry)
+			err := w.signAndValidateTicket(msgtx, forSigning, outpoints[i])
 			if err != nil {
 				return nil, err
 			}
+			w.processTxRecordAndPublish(msgtx, n)
 
-			creditAmount := int64(credit.Amount)
-			inputSum += creditAmount
-
-			newInput := dcrjson.SStxInput{
-				Txid: credit.Hash.String(),
-				Vout: credit.Index,
-				Tree: credit.Tree,
-				Amt:  creditAmount,
-			}
-
-			inputs = append(inputs, newInput)
-			usedCredits = append(usedCredits, credit)
-
-			// All credits used that are not the last credit.
-			if outputSum+creditAmount <= int64(ticketPrice) {
-				// Use a random address if the change amount is
-				// unspendable. This is the case if it's not
-				// the last credit.
-				newChangeAddress, err := randomAddress(w.chainParams)
-				if err != nil {
-					return nil, err
-				}
-
-				cout := dcrjson.SStxCommitOut{
-					Addr:       newAddress.String(),
-					CommitAmt:  creditAmount,
-					ChangeAddr: newChangeAddress.String(),
-					ChangeAmt:  0,
-				}
-				outs = append(outs, cout)
-				outputSum += creditAmount
-			} else {
-				// We've gone over what we needed to use and
-				// so we'll have to change to pop in the
-				// last output.
-
-				estSize := estimateSSTxSize(i)
-				//var feeIncrement dcrutil.Amount
-				//feeIncrement = w.TicketFeeIncrement()
-
-				//fee := feeForSize(feeIncrement, estSize)
-				fee := txrules.FeeForSerializeSize(feePerKB, estSize)
-
-				// Not enough funds after taking fee into account.
-				// Should retry instead of failing, Decred TODO
-				totalWithThisCredit := creditAmount + outputSum
-				if (totalWithThisCredit - int64(fee) - int64(ticketPrice)) < 0 {
-					return nil, ErrSStxNotEnoughFunds
-				}
-
-				remaining := int64(ticketPrice) - outputSum
-				change := creditAmount - remaining - int64(fee)
-
-				var newChangeAddress dcrutil.Address
-				err = walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
-					newChangeAddress, err = addrFunc(w.persistReturnedChild(dbtx), req.account)
-					return err
-				})
-
-				out := dcrjson.SStxCommitOut{
-					Addr:       newAddress.String(),
-					CommitAmt:  creditAmount - change,
-					ChangeAddr: newChangeAddress.String(),
-					ChangeAmt:  change,
-				}
-				outs = append(outs, out)
-				outputSum += remaining + change
-
-				break
-			}
+			ticketHash := msgtx.TxHash()
+			ticketHashes = append(ticketHashes, &ticketHash)
+			log.Infof("Successfully sent SStx purchase transaction %v", ticketHash)
+			msgtx = wire.NewMsgTx()
 		}
+	}
 
-		if len(inputs) == 0 {
-			return nil, ErrSStxNotEnoughFunds
-		}
-
-		// Create simple transaction
-		tx, err := w.txToSStx(addrAmountPair, usedCredits, inputs, outs, req.account, req.minConf)
-		if err != nil {
-			switch {
-			case err == ErrNonPositiveAmount:
-				return nil, fmt.Errorf("Need positive amount")
-			default:
-				return nil, err
-			}
-		}
-
-		// Create transaction record
-		rec, err := udb.NewTxRecordFromMsgTx(tx.MsgTx, time.Now())
-		if err != nil {
-			return ticketHashes, err
-		}
-
-		// Open db to insert and publish the transaction
-		err = walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
-			err = w.processTransactionRecord(dbtx, rec, nil, nil)
-			if err != nil {
-				return err
-			}
-			return n.PublishTransaction(context.TODO(), tx.MsgTx)
-		})
-		if err != nil {
-			return ticketHashes, err
-		}
-
-		ticketHash := tx.MsgTx.TxHash()
+	if req.purchaseTicketsSingleTransaction {
+		w.processTxRecordAndPublish(msgtx, n)
+		ticketHash := msgtx.TxHash()
 		ticketHashes = append(ticketHashes, &ticketHash)
-
 		log.Infof("Successfully sent SStx purchase transaction %v", ticketHash)
 	}
 
