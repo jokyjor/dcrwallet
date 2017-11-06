@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"github.com/decred/dcrwallet/internal/cfgutil"
 	"github.com/decred/dcrwallet/netparams"
 	"github.com/decred/dcrwallet/ticketbuyer"
+	"github.com/decred/dcrwallet/version"
 	"github.com/decred/dcrwallet/wallet"
 	"github.com/decred/dcrwallet/wallet/txrules"
 	flags "github.com/jessevdk/go-flags"
@@ -113,7 +115,6 @@ type config struct {
 	AllowHighFees       bool                 `long:"allowhighfees" description:"Force the RPC client to use the 'allowHighFees' flag when sending transactions"`
 	RelayFee            *cfgutil.AmountFlag  `long:"txfee" description:"Sets the wallet's tx fee per kb"`
 	TicketFee           *cfgutil.AmountFlag  `long:"ticketfee" description:"Sets the wallet's ticket fee per kb"`
-	PipeRx              *uint                `long:"piperx" description:"File descriptor of read end pipe to enable parent -> child process communication"`
 
 	// RPC client options
 	RPCConnect       string                  `short:"c" long:"rpcconnect" description:"Hostname/IP and port of dcrd RPC server to connect to"`
@@ -146,6 +147,11 @@ type config struct {
 	LegacyRPCMaxWebsockets int64                   `long:"rpcmaxwebsockets" description:"Max number of legacy JSON-RPC websocket connections"`
 	Username               string                  `short:"u" long:"username" description:"Username for legacy JSON-RPC and dcrd authentication (if dcrdusername is unset)"`
 	Password               string                  `short:"P" long:"password" default-mask:"-" description:"Password for legacy JSON-RPC and dcrd authentication (if dcrdpassword is unset)"`
+
+	// IPC options
+	PipeTx            *uint `long:"pipetx" description:"File descriptor or handle of write end pipe to enable child -> parent process communication"`
+	PipeRx            *uint `long:"piperx" description:"File descriptor or handle of read end pipe to enable parent -> child process communication"`
+	RPCListenerEvents bool  `long:"rpclistenerevents" description:"Notify JSON-RPC and gRPC listener addresses over the TX pipe"`
 
 	TBOpts ticketBuyerOptions `group:"Ticket Buyer Options" namespace:"ticketbuyer"`
 	tbCfg  ticketbuyer.Config
@@ -317,7 +323,7 @@ func parseAndSetDebugLevels(debugLevel string) error {
 // The bool returned indicates whether or not the wallet was recreated from a
 // seed and needs to perform the initial resync. The []byte is the private
 // passphrase required to do the sync for this special case.
-func loadConfig() (*config, []string, error) {
+func loadConfig(ctx context.Context) (*config, []string, error) {
 	loadConfigError := func(err error) (*config, []string, error) {
 		return nil, nil, err
 	}
@@ -399,7 +405,7 @@ func loadConfig() (*config, []string, error) {
 	appName = strings.TrimSuffix(appName, filepath.Ext(appName))
 	usageMessage := fmt.Sprintf("Use %s -h to show usage", appName)
 	if preCfg.ShowVersion {
-		fmt.Printf("%s version %s (Go version %s)\n", appName, version(), runtime.Version())
+		fmt.Printf("%s version %s (Go version %s)\n", appName, version.String(), runtime.Version())
 		os.Exit(0)
 	}
 
@@ -694,7 +700,7 @@ func loadConfig() (*config, []string, error) {
 		if cfg.CreateWatchingOnly {
 			err = createWatchingOnlyWallet(&cfg)
 		} else {
-			err = createWallet(&cfg)
+			err = createWallet(ctx, &cfg)
 		}
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Unable to create wallet:", err)
@@ -824,7 +830,8 @@ func loadConfig() (*config, []string, error) {
 		return loadConfigError(err)
 	}
 
-	// Both RPC servers may not listen on the same interface/port.
+	// Both RPC servers may not listen on the same interface/port, with the
+	// exception of listeners using port 0.
 	if len(cfg.LegacyRPCListeners) > 0 && len(cfg.GRPCListeners) > 0 {
 		seenAddresses := make(map[string]struct{}, len(cfg.LegacyRPCListeners))
 		for _, addr := range cfg.LegacyRPCListeners {
@@ -832,7 +839,7 @@ func loadConfig() (*config, []string, error) {
 		}
 		for _, addr := range cfg.GRPCListeners {
 			_, seen := seenAddresses[addr]
-			if seen {
+			if seen && !strings.HasSuffix(addr, ":0") {
 				err := fmt.Errorf("Address `%s` may not be "+
 					"used as a listener address for both "+
 					"RPC servers", addr)
