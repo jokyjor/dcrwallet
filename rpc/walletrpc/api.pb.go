@@ -129,6 +129,9 @@ It has these top-level messages:
 	SetVoteChoicesResponse
 	VerifyMessageRequest
 	VerifyMessageResponse
+	DecodedTransaction
+	DecodeRawTransactionRequest
+	DecodeRawTransactionResponse
 */
 package walletrpc
 
@@ -354,6 +357,85 @@ func (x CreateSignatureRequest_SigHashType) String() string {
 }
 func (CreateSignatureRequest_SigHashType) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor0, []int{47, 0}
+}
+
+type DecodedTransaction_Input_TreeType int32
+
+const (
+	DecodedTransaction_Input_REGULAR DecodedTransaction_Input_TreeType = 0
+	DecodedTransaction_Input_UNKNOWN DecodedTransaction_Input_TreeType = -1
+	DecodedTransaction_Input_STAKE   DecodedTransaction_Input_TreeType = 1
+)
+
+var DecodedTransaction_Input_TreeType_name = map[int32]string{
+	0:  "REGULAR",
+	-1: "UNKNOWN",
+	1:  "STAKE",
+}
+var DecodedTransaction_Input_TreeType_value = map[string]int32{
+	"REGULAR": 0,
+	"UNKNOWN": -1,
+	"STAKE":   1,
+}
+
+func (x DecodedTransaction_Input_TreeType) String() string {
+	return proto.EnumName(DecodedTransaction_Input_TreeType_name, int32(x))
+}
+func (DecodedTransaction_Input_TreeType) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor0, []int{117, 0, 0}
+}
+
+type DecodedTransaction_Output_ScriptClass int32
+
+const (
+	DecodedTransaction_Output_NON_STANDARD     DecodedTransaction_Output_ScriptClass = 0
+	DecodedTransaction_Output_PUB_KEY          DecodedTransaction_Output_ScriptClass = 1
+	DecodedTransaction_Output_PUB_KEY_HASH     DecodedTransaction_Output_ScriptClass = 2
+	DecodedTransaction_Output_SCRIPT_HASH      DecodedTransaction_Output_ScriptClass = 3
+	DecodedTransaction_Output_MULTI_SIG        DecodedTransaction_Output_ScriptClass = 4
+	DecodedTransaction_Output_NULL_DATA        DecodedTransaction_Output_ScriptClass = 5
+	DecodedTransaction_Output_STAKE_SUBMISSION DecodedTransaction_Output_ScriptClass = 6
+	DecodedTransaction_Output_STAKE_GEN        DecodedTransaction_Output_ScriptClass = 7
+	DecodedTransaction_Output_STAKE_REVOCATION DecodedTransaction_Output_ScriptClass = 8
+	DecodedTransaction_Output_STAKE_SUB_CHANGE DecodedTransaction_Output_ScriptClass = 9
+	DecodedTransaction_Output_PUB_KEY_ALT      DecodedTransaction_Output_ScriptClass = 10
+	DecodedTransaction_Output_PUB_KEY_HASH_ALT DecodedTransaction_Output_ScriptClass = 11
+)
+
+var DecodedTransaction_Output_ScriptClass_name = map[int32]string{
+	0:  "NON_STANDARD",
+	1:  "PUB_KEY",
+	2:  "PUB_KEY_HASH",
+	3:  "SCRIPT_HASH",
+	4:  "MULTI_SIG",
+	5:  "NULL_DATA",
+	6:  "STAKE_SUBMISSION",
+	7:  "STAKE_GEN",
+	8:  "STAKE_REVOCATION",
+	9:  "STAKE_SUB_CHANGE",
+	10: "PUB_KEY_ALT",
+	11: "PUB_KEY_HASH_ALT",
+}
+var DecodedTransaction_Output_ScriptClass_value = map[string]int32{
+	"NON_STANDARD":     0,
+	"PUB_KEY":          1,
+	"PUB_KEY_HASH":     2,
+	"SCRIPT_HASH":      3,
+	"MULTI_SIG":        4,
+	"NULL_DATA":        5,
+	"STAKE_SUBMISSION": 6,
+	"STAKE_GEN":        7,
+	"STAKE_REVOCATION": 8,
+	"STAKE_SUB_CHANGE": 9,
+	"PUB_KEY_ALT":      10,
+	"PUB_KEY_HASH_ALT": 11,
+}
+
+func (x DecodedTransaction_Output_ScriptClass) String() string {
+	return proto.EnumName(DecodedTransaction_Output_ScriptClass_name, int32(x))
+}
+func (DecodedTransaction_Output_ScriptClass) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor0, []int{117, 1, 0}
 }
 
 type VersionRequest struct {
@@ -3830,6 +3912,262 @@ func (m *VerifyMessageResponse) GetValid() bool {
 	return false
 }
 
+type DecodedTransaction struct {
+	TransactionHash []byte                             `protobuf:"bytes,1,opt,name=transaction_hash,json=transactionHash,proto3" json:"transaction_hash,omitempty"`
+	Version         int32                              `protobuf:"varint,2,opt,name=version" json:"version,omitempty"`
+	LockTime        uint32                             `protobuf:"varint,3,opt,name=lock_time,json=lockTime" json:"lock_time,omitempty"`
+	Expiry          uint32                             `protobuf:"varint,4,opt,name=expiry" json:"expiry,omitempty"`
+	TransactionType TransactionDetails_TransactionType `protobuf:"varint,5,opt,name=transaction_type,json=transactionType,enum=walletrpc.TransactionDetails_TransactionType" json:"transaction_type,omitempty"`
+	Inputs          []*DecodedTransaction_Input        `protobuf:"bytes,6,rep,name=inputs" json:"inputs,omitempty"`
+	Outputs         []*DecodedTransaction_Output       `protobuf:"bytes,7,rep,name=outputs" json:"outputs,omitempty"`
+}
+
+func (m *DecodedTransaction) Reset()                    { *m = DecodedTransaction{} }
+func (m *DecodedTransaction) String() string            { return proto.CompactTextString(m) }
+func (*DecodedTransaction) ProtoMessage()               {}
+func (*DecodedTransaction) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{117} }
+
+func (m *DecodedTransaction) GetTransactionHash() []byte {
+	if m != nil {
+		return m.TransactionHash
+	}
+	return nil
+}
+
+func (m *DecodedTransaction) GetVersion() int32 {
+	if m != nil {
+		return m.Version
+	}
+	return 0
+}
+
+func (m *DecodedTransaction) GetLockTime() uint32 {
+	if m != nil {
+		return m.LockTime
+	}
+	return 0
+}
+
+func (m *DecodedTransaction) GetExpiry() uint32 {
+	if m != nil {
+		return m.Expiry
+	}
+	return 0
+}
+
+func (m *DecodedTransaction) GetTransactionType() TransactionDetails_TransactionType {
+	if m != nil {
+		return m.TransactionType
+	}
+	return TransactionDetails_REGULAR
+}
+
+func (m *DecodedTransaction) GetInputs() []*DecodedTransaction_Input {
+	if m != nil {
+		return m.Inputs
+	}
+	return nil
+}
+
+func (m *DecodedTransaction) GetOutputs() []*DecodedTransaction_Output {
+	if m != nil {
+		return m.Outputs
+	}
+	return nil
+}
+
+type DecodedTransaction_Input struct {
+	PreviousTransactionHash  []byte                            `protobuf:"bytes,1,opt,name=previous_transaction_hash,json=previousTransactionHash,proto3" json:"previous_transaction_hash,omitempty"`
+	PreviousTransactionIndex uint32                            `protobuf:"varint,2,opt,name=previous_transaction_index,json=previousTransactionIndex" json:"previous_transaction_index,omitempty"`
+	Tree                     DecodedTransaction_Input_TreeType `protobuf:"varint,3,opt,name=tree,enum=walletrpc.DecodedTransaction_Input_TreeType" json:"tree,omitempty"`
+	Sequence                 uint32                            `protobuf:"varint,4,opt,name=sequence" json:"sequence,omitempty"`
+	AmountIn                 int64                             `protobuf:"varint,5,opt,name=amount_in,json=amountIn" json:"amount_in,omitempty"`
+	BlockHeight              uint32                            `protobuf:"varint,6,opt,name=block_height,json=blockHeight" json:"block_height,omitempty"`
+	BlockIndex               uint32                            `protobuf:"varint,7,opt,name=block_index,json=blockIndex" json:"block_index,omitempty"`
+	SignatureScript          []byte                            `protobuf:"bytes,8,opt,name=signature_script,json=signatureScript,proto3" json:"signature_script,omitempty"`
+	SignatureScriptAsm       string                            `protobuf:"bytes,9,opt,name=signature_script_asm,json=signatureScriptAsm" json:"signature_script_asm,omitempty"`
+}
+
+func (m *DecodedTransaction_Input) Reset()                    { *m = DecodedTransaction_Input{} }
+func (m *DecodedTransaction_Input) String() string            { return proto.CompactTextString(m) }
+func (*DecodedTransaction_Input) ProtoMessage()               {}
+func (*DecodedTransaction_Input) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{117, 0} }
+
+func (m *DecodedTransaction_Input) GetPreviousTransactionHash() []byte {
+	if m != nil {
+		return m.PreviousTransactionHash
+	}
+	return nil
+}
+
+func (m *DecodedTransaction_Input) GetPreviousTransactionIndex() uint32 {
+	if m != nil {
+		return m.PreviousTransactionIndex
+	}
+	return 0
+}
+
+func (m *DecodedTransaction_Input) GetTree() DecodedTransaction_Input_TreeType {
+	if m != nil {
+		return m.Tree
+	}
+	return DecodedTransaction_Input_REGULAR
+}
+
+func (m *DecodedTransaction_Input) GetSequence() uint32 {
+	if m != nil {
+		return m.Sequence
+	}
+	return 0
+}
+
+func (m *DecodedTransaction_Input) GetAmountIn() int64 {
+	if m != nil {
+		return m.AmountIn
+	}
+	return 0
+}
+
+func (m *DecodedTransaction_Input) GetBlockHeight() uint32 {
+	if m != nil {
+		return m.BlockHeight
+	}
+	return 0
+}
+
+func (m *DecodedTransaction_Input) GetBlockIndex() uint32 {
+	if m != nil {
+		return m.BlockIndex
+	}
+	return 0
+}
+
+func (m *DecodedTransaction_Input) GetSignatureScript() []byte {
+	if m != nil {
+		return m.SignatureScript
+	}
+	return nil
+}
+
+func (m *DecodedTransaction_Input) GetSignatureScriptAsm() string {
+	if m != nil {
+		return m.SignatureScriptAsm
+	}
+	return ""
+}
+
+type DecodedTransaction_Output struct {
+	Value              int64                                 `protobuf:"varint,1,opt,name=value" json:"value,omitempty"`
+	Index              uint32                                `protobuf:"varint,2,opt,name=index" json:"index,omitempty"`
+	Version            int32                                 `protobuf:"varint,3,opt,name=version" json:"version,omitempty"`
+	Script             []byte                                `protobuf:"bytes,4,opt,name=script,proto3" json:"script,omitempty"`
+	ScriptAsm          string                                `protobuf:"bytes,5,opt,name=script_asm,json=scriptAsm" json:"script_asm,omitempty"`
+	RequiredSignatures int32                                 `protobuf:"varint,6,opt,name=required_signatures,json=requiredSignatures" json:"required_signatures,omitempty"`
+	ScriptClass        DecodedTransaction_Output_ScriptClass `protobuf:"varint,7,opt,name=script_class,json=scriptClass,enum=walletrpc.DecodedTransaction_Output_ScriptClass" json:"script_class,omitempty"`
+	Addresses          []string                              `protobuf:"bytes,8,rep,name=addresses" json:"addresses,omitempty"`
+	CommitmentAmount   int64                                 `protobuf:"varint,9,opt,name=commitment_amount,json=commitmentAmount" json:"commitment_amount,omitempty"`
+}
+
+func (m *DecodedTransaction_Output) Reset()                    { *m = DecodedTransaction_Output{} }
+func (m *DecodedTransaction_Output) String() string            { return proto.CompactTextString(m) }
+func (*DecodedTransaction_Output) ProtoMessage()               {}
+func (*DecodedTransaction_Output) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{117, 1} }
+
+func (m *DecodedTransaction_Output) GetValue() int64 {
+	if m != nil {
+		return m.Value
+	}
+	return 0
+}
+
+func (m *DecodedTransaction_Output) GetIndex() uint32 {
+	if m != nil {
+		return m.Index
+	}
+	return 0
+}
+
+func (m *DecodedTransaction_Output) GetVersion() int32 {
+	if m != nil {
+		return m.Version
+	}
+	return 0
+}
+
+func (m *DecodedTransaction_Output) GetScript() []byte {
+	if m != nil {
+		return m.Script
+	}
+	return nil
+}
+
+func (m *DecodedTransaction_Output) GetScriptAsm() string {
+	if m != nil {
+		return m.ScriptAsm
+	}
+	return ""
+}
+
+func (m *DecodedTransaction_Output) GetRequiredSignatures() int32 {
+	if m != nil {
+		return m.RequiredSignatures
+	}
+	return 0
+}
+
+func (m *DecodedTransaction_Output) GetScriptClass() DecodedTransaction_Output_ScriptClass {
+	if m != nil {
+		return m.ScriptClass
+	}
+	return DecodedTransaction_Output_NON_STANDARD
+}
+
+func (m *DecodedTransaction_Output) GetAddresses() []string {
+	if m != nil {
+		return m.Addresses
+	}
+	return nil
+}
+
+func (m *DecodedTransaction_Output) GetCommitmentAmount() int64 {
+	if m != nil {
+		return m.CommitmentAmount
+	}
+	return 0
+}
+
+type DecodeRawTransactionRequest struct {
+	SerializedTransaction []byte `protobuf:"bytes,1,opt,name=serialized_transaction,json=serializedTransaction,proto3" json:"serialized_transaction,omitempty"`
+}
+
+func (m *DecodeRawTransactionRequest) Reset()                    { *m = DecodeRawTransactionRequest{} }
+func (m *DecodeRawTransactionRequest) String() string            { return proto.CompactTextString(m) }
+func (*DecodeRawTransactionRequest) ProtoMessage()               {}
+func (*DecodeRawTransactionRequest) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{118} }
+
+func (m *DecodeRawTransactionRequest) GetSerializedTransaction() []byte {
+	if m != nil {
+		return m.SerializedTransaction
+	}
+	return nil
+}
+
+type DecodeRawTransactionResponse struct {
+	Transaction *DecodedTransaction `protobuf:"bytes,1,opt,name=transaction" json:"transaction,omitempty"`
+}
+
+func (m *DecodeRawTransactionResponse) Reset()                    { *m = DecodeRawTransactionResponse{} }
+func (m *DecodeRawTransactionResponse) String() string            { return proto.CompactTextString(m) }
+func (*DecodeRawTransactionResponse) ProtoMessage()               {}
+func (*DecodeRawTransactionResponse) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{119} }
+
+func (m *DecodeRawTransactionResponse) GetTransaction() *DecodedTransaction {
+	if m != nil {
+		return m.Transaction
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterType((*VersionRequest)(nil), "walletrpc.VersionRequest")
 	proto.RegisterType((*VersionResponse)(nil), "walletrpc.VersionResponse")
@@ -3965,6 +4303,11 @@ func init() {
 	proto.RegisterType((*SetVoteChoicesResponse)(nil), "walletrpc.SetVoteChoicesResponse")
 	proto.RegisterType((*VerifyMessageRequest)(nil), "walletrpc.VerifyMessageRequest")
 	proto.RegisterType((*VerifyMessageResponse)(nil), "walletrpc.VerifyMessageResponse")
+	proto.RegisterType((*DecodedTransaction)(nil), "walletrpc.DecodedTransaction")
+	proto.RegisterType((*DecodedTransaction_Input)(nil), "walletrpc.DecodedTransaction.Input")
+	proto.RegisterType((*DecodedTransaction_Output)(nil), "walletrpc.DecodedTransaction.Output")
+	proto.RegisterType((*DecodeRawTransactionRequest)(nil), "walletrpc.DecodeRawTransactionRequest")
+	proto.RegisterType((*DecodeRawTransactionResponse)(nil), "walletrpc.DecodeRawTransactionResponse")
 	proto.RegisterEnum("walletrpc.TransactionDetails_TransactionType", TransactionDetails_TransactionType_name, TransactionDetails_TransactionType_value)
 	proto.RegisterEnum("walletrpc.NextAddressRequest_Kind", NextAddressRequest_Kind_name, NextAddressRequest_Kind_value)
 	proto.RegisterEnum("walletrpc.NextAddressRequest_GapPolicy", NextAddressRequest_GapPolicy_name, NextAddressRequest_GapPolicy_value)
@@ -3972,6 +4315,8 @@ func init() {
 	proto.RegisterEnum("walletrpc.ChangePassphraseRequest_Key", ChangePassphraseRequest_Key_name, ChangePassphraseRequest_Key_value)
 	proto.RegisterEnum("walletrpc.ConstructTransactionRequest_OutputSelectionAlgorithm", ConstructTransactionRequest_OutputSelectionAlgorithm_name, ConstructTransactionRequest_OutputSelectionAlgorithm_value)
 	proto.RegisterEnum("walletrpc.CreateSignatureRequest_SigHashType", CreateSignatureRequest_SigHashType_name, CreateSignatureRequest_SigHashType_value)
+	proto.RegisterEnum("walletrpc.DecodedTransaction_Input_TreeType", DecodedTransaction_Input_TreeType_name, DecodedTransaction_Input_TreeType_value)
+	proto.RegisterEnum("walletrpc.DecodedTransaction_Output_ScriptClass", DecodedTransaction_Output_ScriptClass_name, DecodedTransaction_Output_ScriptClass_value)
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -6345,6 +6690,70 @@ var _MessageVerificationService_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "VerifyMessage",
 			Handler:    _MessageVerificationService_VerifyMessage_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "api.proto",
+}
+
+// Client API for DecodeMessageService service
+
+type DecodeMessageServiceClient interface {
+	DecodeRawTransaction(ctx context.Context, in *DecodeRawTransactionRequest, opts ...grpc.CallOption) (*DecodeRawTransactionResponse, error)
+}
+
+type decodeMessageServiceClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewDecodeMessageServiceClient(cc *grpc.ClientConn) DecodeMessageServiceClient {
+	return &decodeMessageServiceClient{cc}
+}
+
+func (c *decodeMessageServiceClient) DecodeRawTransaction(ctx context.Context, in *DecodeRawTransactionRequest, opts ...grpc.CallOption) (*DecodeRawTransactionResponse, error) {
+	out := new(DecodeRawTransactionResponse)
+	err := grpc.Invoke(ctx, "/walletrpc.DecodeMessageService/DecodeRawTransaction", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Server API for DecodeMessageService service
+
+type DecodeMessageServiceServer interface {
+	DecodeRawTransaction(context.Context, *DecodeRawTransactionRequest) (*DecodeRawTransactionResponse, error)
+}
+
+func RegisterDecodeMessageServiceServer(s *grpc.Server, srv DecodeMessageServiceServer) {
+	s.RegisterService(&_DecodeMessageService_serviceDesc, srv)
+}
+
+func _DecodeMessageService_DecodeRawTransaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DecodeRawTransactionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DecodeMessageServiceServer).DecodeRawTransaction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/walletrpc.DecodeMessageService/DecodeRawTransaction",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DecodeMessageServiceServer).DecodeRawTransaction(ctx, req.(*DecodeRawTransactionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+var _DecodeMessageService_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "walletrpc.DecodeMessageService",
+	HandlerType: (*DecodeMessageServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "DecodeRawTransaction",
+			Handler:    _DecodeMessageService_DecodeRawTransaction_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
