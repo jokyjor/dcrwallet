@@ -1579,7 +1579,7 @@ func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.
 		}
 		forSigning = append(forSigning, eopCredit)
 
-		if !req.purchaseTicketsSingleTransaction {
+		if !req.multiOutputSstx {
 			msgtx.Expiry = uint32(req.expiry)
 			err := w.signAndValidateTicket(msgtx, forSigning, outpoints[i])
 			if err != nil {
@@ -1594,7 +1594,7 @@ func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.
 		}
 	}
 
-	if req.purchaseTicketsSingleTransaction {
+	if req.multiOutputSstx {
 		w.processTxRecordAndPublish(msgtx, n)
 		ticketHash := msgtx.TxHash()
 		ticketHashes = append(ticketHashes, &ticketHash)
