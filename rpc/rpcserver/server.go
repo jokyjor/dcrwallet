@@ -1226,7 +1226,7 @@ func (s *walletServer) PurchaseTickets(ctx context.Context,
 
 	resp, err := s.wallet.PurchaseTickets(0, spendLimit, minConf,
 			ticketAddr, req.Account, numTickets, poolAddr, req.PoolFees,
-			expiry, txFee, ticketFee, req.NoSplitTransaction, req.PurchaseTicketsSingleTransaction)
+			expiry, txFee, ticketFee, req.NoSplitTransaction, req.MultiOutputSstx)
 	if err != nil {
 		return nil, status.Errorf(codes.FailedPrecondition,
 			"Unable to purchase tickets: %v", err)
@@ -2132,15 +2132,15 @@ func (t *ticketbuyerServer) SetNoSplitTransaction(ctx context.Context, req *pb.S
 	return &pb.SetNoSplitTransactionResponse{}, nil
 }
 
-//SetNoSplitTransaction sets the value of the nosplittrasnaction option
-func (t *ticketbuyerServer) SetPurchaseTicketsSingleTransaction(ctx context.Context, req *pb.SetPurchaseTicketsSingleTransactionRequest) (*pb.SetPurchaseTicketsSingleTransactionResponse, error) {
+//SetMultiOutputSstx sets the value of the multiOutputSstx option
+func (t *ticketbuyerServer) SetMultiOutputSstx(ctx context.Context, req *pb.SetMultiOutputSstxRequest) (*pb.SetMultiOutputSstxResponse, error) {
 	pm, err := t.requirePurchaseManager()
 	if err != nil {
 		return nil, err
 	}
 
-	pm.Purchaser().SetPurchaseTicketsSingleTransaction(req.PurchaseTicketsSingleTransaction)
-	return &pb.SetPurchaseTicketsSingleTransactionResponse{}, nil
+	pm.Purchaser().SetMultiOutputSstx(req.MultiOutputSstx)
+	return &pb.SetMultiOutputSstxResponse{}, nil
 }
 
 // SetPoolAddress sets the pool address where ticket fees are sent.
