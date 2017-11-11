@@ -121,6 +121,7 @@ type TicketPurchaser struct {
 
 // Config returns the current ticket buyer configuration.
 func (t *TicketPurchaser) Config() (*Config, error) {
+	defer t.purchaserMtx.Unlock()
 	t.purchaserMtx.Lock()
 	accountName, err := t.wallet.AccountName(t.account)
 	if err != nil {
@@ -151,7 +152,6 @@ func (t *TicketPurchaser) Config() (*Config, error) {
 		NoSplitTransaction: t.cfg.NoSplitTransaction,
 		MultiOutputSstx:    t.cfg.MultiOutputSstx,
 	}
-	t.purchaserMtx.Unlock()
 	return config, nil
 }
 
