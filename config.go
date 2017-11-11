@@ -50,24 +50,24 @@ const (
 	defaultAllowHighFees       = false
 
 	// ticket buyer options
-	defaultMaxFee                           dcrutil.Amount = 1e6
-	defaultMinFee                           dcrutil.Amount = 1e5
-	defaultMaxPriceScale                                   = 0.0
-	defaultAvgVWAPPriceDelta                               = 2880
-	defaultMaxPerBlock                                     = 1
-	defaultBlocksToAvg                                     = 11
-	defaultFeeTargetScaling                                = 1.0
-	defaultMaxInMempool                                    = 40
-	defaultExpiryDelta                                     = 16
-	defaultFeeSource                                       = ticketbuyer.TicketFeeMedian
-	defaultAvgPriceMode                                    = ticketbuyer.PriceTargetVWAP
-	defaultMaxPriceAbsolute                                = 0
-	defaultMaxPriceRelative                                = 1.25
-	defaultPriceTarget                                     = 0
-	defaultBalanceToMaintainAbsolute                       = 0
-	defaultBalanceToMaintainRelative                       = 0.3
-	defaultNoSplitTransaction                              = false
-	defaultPurchaseTicketsSingleTransaction                = false
+	defaultMaxFee                    dcrutil.Amount = 1e6
+	defaultMinFee                    dcrutil.Amount = 1e5
+	defaultMaxPriceScale                            = 0.0
+	defaultAvgVWAPPriceDelta                        = 2880
+	defaultMaxPerBlock                              = 1
+	defaultBlocksToAvg                              = 11
+	defaultFeeTargetScaling                         = 1.0
+	defaultMaxInMempool                             = 40
+	defaultExpiryDelta                              = 16
+	defaultFeeSource                                = ticketbuyer.TicketFeeMedian
+	defaultAvgPriceMode                             = ticketbuyer.PriceTargetVWAP
+	defaultMaxPriceAbsolute                         = 0
+	defaultMaxPriceRelative                         = 1.25
+	defaultPriceTarget                              = 0
+	defaultBalanceToMaintainAbsolute                = 0
+	defaultBalanceToMaintainRelative                = 0.3
+	defaultNoSplitTransaction                       = false
+	defaultMultiOutputSstx                          = false
 
 	walletDbName = "wallet.db"
 )
@@ -164,25 +164,25 @@ type config struct {
 }
 
 type ticketBuyerOptions struct {
-	AvgPriceMode                     string               `long:"avgpricemode" description:"The mode to use for calculating the average price if pricetarget is disabled (vwap, pool, dual)"`
-	AvgPriceVWAPDelta                int                  `long:"avgpricevwapdelta" description:"The number of blocks to use from the current block to calculate the VWAP"`
-	MaxFee                           *cfgutil.AmountFlag  `long:"maxfee" description:"Maximum ticket fee per KB"`
-	MinFee                           *cfgutil.AmountFlag  `long:"minfee" description:"Minimum ticket fee per KB"`
-	FeeSource                        string               `long:"feesource" description:"The fee source to use for ticket fee per KB (median or mean)"`
-	MaxPerBlock                      int                  `long:"maxperblock" description:"Maximum tickets per block, with negative numbers indicating buy one ticket every 1-in-n blocks"`
-	BlocksToAvg                      int                  `long:"blockstoavg" description:"Number of blocks to average for fees calculation"`
-	FeeTargetScaling                 float64              `long:"feetargetscaling" description:"Scaling factor for setting the ticket fee, multiplies by the average fee"`
-	MaxInMempool                     int                  `long:"maxinmempool" description:"The maximum number of your tickets allowed in mempool before purchasing more tickets"`
-	ExpiryDelta                      int                  `long:"expirydelta" description:"Number of blocks in the future before the ticket expires"`
-	MaxPriceAbsolute                 *cfgutil.AmountFlag  `long:"maxpriceabsolute" description:"Maximum absolute price to purchase a ticket"`
-	MaxPriceRelative                 float64              `long:"maxpricerelative" description:"Scaling factor for setting the maximum price, multiplies by the average price"`
-	BalanceToMaintainAbsolute        *cfgutil.AmountFlag  `long:"balancetomaintainabsolute" description:"Amount of funds to keep in wallet when stake mining"`
-	BalanceToMaintainRelative        float64              `long:"balancetomaintainrelative" description:"Proportion of funds to leave in wallet when stake mining"`
-	NoSpreadTicketPurchases          bool                 `long:"nospreadticketpurchases" description:"Do not spread ticket purchases evenly throughout the window"`
-	DontWaitForTickets               bool                 `long:"dontwaitfortickets" description:"Don't wait until your last round of tickets have entered the blockchain to attempt to purchase more"`
-	NoSplitTransaction               bool                 `long:"nosplittransaction" description:"Do not use split transaction when purchasing tickets"`
-	VotingAddress                    *cfgutil.AddressFlag `long:"votingaddress" description:"Purchase tickets with voting rights assigned to this address"`
-	PurchaseTicketsSingleTransaction bool                 `long:"purchaseticketssingletransaction" description:"Purchase tickets in a single transaction"`
+	AvgPriceMode              string               `long:"avgpricemode" description:"The mode to use for calculating the average price if pricetarget is disabled (vwap, pool, dual)"`
+	AvgPriceVWAPDelta         int                  `long:"avgpricevwapdelta" description:"The number of blocks to use from the current block to calculate the VWAP"`
+	MaxFee                    *cfgutil.AmountFlag  `long:"maxfee" description:"Maximum ticket fee per KB"`
+	MinFee                    *cfgutil.AmountFlag  `long:"minfee" description:"Minimum ticket fee per KB"`
+	FeeSource                 string               `long:"feesource" description:"The fee source to use for ticket fee per KB (median or mean)"`
+	MaxPerBlock               int                  `long:"maxperblock" description:"Maximum tickets per block, with negative numbers indicating buy one ticket every 1-in-n blocks"`
+	BlocksToAvg               int                  `long:"blockstoavg" description:"Number of blocks to average for fees calculation"`
+	FeeTargetScaling          float64              `long:"feetargetscaling" description:"Scaling factor for setting the ticket fee, multiplies by the average fee"`
+	MaxInMempool              int                  `long:"maxinmempool" description:"The maximum number of your tickets allowed in mempool before purchasing more tickets"`
+	ExpiryDelta               int                  `long:"expirydelta" description:"Number of blocks in the future before the ticket expires"`
+	MaxPriceAbsolute          *cfgutil.AmountFlag  `long:"maxpriceabsolute" description:"Maximum absolute price to purchase a ticket"`
+	MaxPriceRelative          float64              `long:"maxpricerelative" description:"Scaling factor for setting the maximum price, multiplies by the average price"`
+	BalanceToMaintainAbsolute *cfgutil.AmountFlag  `long:"balancetomaintainabsolute" description:"Amount of funds to keep in wallet when stake mining"`
+	BalanceToMaintainRelative float64              `long:"balancetomaintainrelative" description:"Proportion of funds to leave in wallet when stake mining"`
+	NoSpreadTicketPurchases   bool                 `long:"nospreadticketpurchases" description:"Do not spread ticket purchases evenly throughout the window"`
+	DontWaitForTickets        bool                 `long:"dontwaitfortickets" description:"Don't wait until your last round of tickets have entered the blockchain to attempt to purchase more"`
+	NoSplitTransaction        bool                 `long:"nosplittransaction" description:"Do not use split transaction when purchasing tickets"`
+	VotingAddress             *cfgutil.AddressFlag `long:"votingaddress" description:"Purchase tickets with voting rights assigned to this address"`
+	MultiOutputSstx           bool                 `long:"multioutputsstx" description:"Purchase one or more tickets in a single transaction"`
 
 	// Deprecated options
 	MaxPriceScale         float64             `long:"maxpricescale" description:"DEPRECATED -- Attempt to prevent the stake difficulty from going above this multiplier (>1.0) by manipulation, 0 to disable"`
@@ -366,25 +366,25 @@ func loadConfig(ctx context.Context) (*config, []string, error) {
 
 		// Ticket Buyer Options
 		TBOpts: ticketBuyerOptions{
-			MaxPriceScale:                    defaultMaxPriceScale,
-			AvgPriceMode:                     defaultAvgPriceMode,
-			AvgPriceVWAPDelta:                defaultAvgVWAPPriceDelta,
-			MaxFee:                           cfgutil.NewAmountFlag(defaultMaxFee),
-			MinFee:                           cfgutil.NewAmountFlag(defaultMinFee),
-			FeeSource:                        defaultFeeSource,
-			MaxPerBlock:                      defaultMaxPerBlock,
-			BlocksToAvg:                      defaultBlocksToAvg,
-			FeeTargetScaling:                 defaultFeeTargetScaling,
-			MaxInMempool:                     defaultMaxInMempool,
-			ExpiryDelta:                      defaultExpiryDelta,
-			MaxPriceAbsolute:                 cfgutil.NewAmountFlag(defaultMaxPriceAbsolute),
-			MaxPriceRelative:                 defaultMaxPriceRelative,
-			PriceTarget:                      cfgutil.NewAmountFlag(defaultPriceTarget),
-			BalanceToMaintainAbsolute:        cfgutil.NewAmountFlag(defaultBalanceToMaintainAbsolute),
-			BalanceToMaintainRelative:        defaultBalanceToMaintainRelative,
-			NoSplitTransaction:               defaultNoSplitTransaction,
-			VotingAddress:                    cfgutil.NewAddressFlag(nil),
-			PurchaseTicketsSingleTransaction: defaultPurchaseTicketsSingleTransaction,
+			MaxPriceScale:             defaultMaxPriceScale,
+			AvgPriceMode:              defaultAvgPriceMode,
+			AvgPriceVWAPDelta:         defaultAvgVWAPPriceDelta,
+			MaxFee:                    cfgutil.NewAmountFlag(defaultMaxFee),
+			MinFee:                    cfgutil.NewAmountFlag(defaultMinFee),
+			FeeSource:                 defaultFeeSource,
+			MaxPerBlock:               defaultMaxPerBlock,
+			BlocksToAvg:               defaultBlocksToAvg,
+			FeeTargetScaling:          defaultFeeTargetScaling,
+			MaxInMempool:              defaultMaxInMempool,
+			ExpiryDelta:               defaultExpiryDelta,
+			MaxPriceAbsolute:          cfgutil.NewAmountFlag(defaultMaxPriceAbsolute),
+			MaxPriceRelative:          defaultMaxPriceRelative,
+			PriceTarget:               cfgutil.NewAmountFlag(defaultPriceTarget),
+			BalanceToMaintainAbsolute: cfgutil.NewAmountFlag(defaultBalanceToMaintainAbsolute),
+			BalanceToMaintainRelative: defaultBalanceToMaintainRelative,
+			NoSplitTransaction:        defaultNoSplitTransaction,
+			VotingAddress:             cfgutil.NewAddressFlag(nil),
+			MultiOutputSstx:           defaultMultiOutputSstx,
 		},
 	}
 
@@ -916,29 +916,29 @@ func loadConfig(ctx context.Context) (*config, []string, error) {
 
 	// Build ticketbuyer config
 	cfg.tbCfg = ticketbuyer.Config{
-		AccountName:                      cfg.PurchaseAccount,
-		AvgPriceMode:                     cfg.TBOpts.AvgPriceMode,
-		AvgPriceVWAPDelta:                cfg.TBOpts.AvgPriceVWAPDelta,
-		BalanceToMaintainAbsolute:        int64(cfg.TBOpts.BalanceToMaintainAbsolute.Amount),
-		BalanceToMaintainRelative:        cfg.TBOpts.BalanceToMaintainRelative,
-		BlocksToAvg:                      cfg.TBOpts.BlocksToAvg,
-		DontWaitForTickets:               cfg.TBOpts.DontWaitForTickets,
-		ExpiryDelta:                      cfg.TBOpts.ExpiryDelta,
-		FeeSource:                        cfg.TBOpts.FeeSource,
-		FeeTargetScaling:                 cfg.TBOpts.FeeTargetScaling,
-		MinFee:                           int64(cfg.TBOpts.MinFee.Amount),
-		MaxFee:                           int64(cfg.TBOpts.MaxFee.Amount),
-		MaxPerBlock:                      cfg.TBOpts.MaxPerBlock,
-		MaxPriceAbsolute:                 int64(cfg.TBOpts.MaxPriceAbsolute.Amount),
-		MaxPriceRelative:                 cfg.TBOpts.MaxPriceRelative,
-		MaxInMempool:                     cfg.TBOpts.MaxInMempool,
-		PoolAddress:                      cfg.PoolAddress.Address,
-		PoolFees:                         cfg.PoolFees,
-		NoSpreadTicketPurchases:          cfg.TBOpts.NoSpreadTicketPurchases,
-		VotingAddress:                    votingAddress,
-		TxFee:                            int64(cfg.RelayFee.Amount),
-		NoSplitTransaction:               cfg.TBOpts.NoSplitTransaction,
-		PurchaseTicketsSingleTransaction: cfg.TBOpts.PurchaseTicketsSingleTransaction,
+		AccountName:               cfg.PurchaseAccount,
+		AvgPriceMode:              cfg.TBOpts.AvgPriceMode,
+		AvgPriceVWAPDelta:         cfg.TBOpts.AvgPriceVWAPDelta,
+		BalanceToMaintainAbsolute: int64(cfg.TBOpts.BalanceToMaintainAbsolute.Amount),
+		BalanceToMaintainRelative: cfg.TBOpts.BalanceToMaintainRelative,
+		BlocksToAvg:               cfg.TBOpts.BlocksToAvg,
+		DontWaitForTickets:        cfg.TBOpts.DontWaitForTickets,
+		ExpiryDelta:               cfg.TBOpts.ExpiryDelta,
+		FeeSource:                 cfg.TBOpts.FeeSource,
+		FeeTargetScaling:          cfg.TBOpts.FeeTargetScaling,
+		MinFee:                    int64(cfg.TBOpts.MinFee.Amount),
+		MaxFee:                    int64(cfg.TBOpts.MaxFee.Amount),
+		MaxPerBlock:               cfg.TBOpts.MaxPerBlock,
+		MaxPriceAbsolute:          int64(cfg.TBOpts.MaxPriceAbsolute.Amount),
+		MaxPriceRelative:          cfg.TBOpts.MaxPriceRelative,
+		MaxInMempool:              cfg.TBOpts.MaxInMempool,
+		PoolAddress:               cfg.PoolAddress.Address,
+		PoolFees:                  cfg.PoolFees,
+		NoSpreadTicketPurchases:   cfg.TBOpts.NoSpreadTicketPurchases,
+		VotingAddress:             votingAddress,
+		TxFee:                     int64(cfg.RelayFee.Amount),
+		NoSplitTransaction:        cfg.TBOpts.NoSplitTransaction,
+		MultiOutputSstx:           cfg.TBOpts.MultiOutputSstx,
 	}
 
 	// Make list of old versions of testnet directories.
