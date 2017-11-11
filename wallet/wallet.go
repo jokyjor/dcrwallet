@@ -903,20 +903,20 @@ type (
 		resp       chan createSSRtxResponse
 	}
 	purchaseTicketRequest struct {
-		minBalance                       dcrutil.Amount
-		spendLimit                       dcrutil.Amount
-		minConf                          int32
-		ticketAddr                       dcrutil.Address
-		account                          uint32
-		numTickets                       int
-		poolAddress                      dcrutil.Address
-		poolFees                         float64
-		expiry                           int32
-		txFee                            dcrutil.Amount
-		ticketFee                        dcrutil.Amount
-		resp                             chan purchaseTicketResponse
-		noSplitTransaction               bool
-		purchaseTicketsSingleTransaction bool
+		minBalance         dcrutil.Amount
+		spendLimit         dcrutil.Amount
+		minConf            int32
+		ticketAddr         dcrutil.Address
+		account            uint32
+		numTickets         int
+		poolAddress        dcrutil.Address
+		poolFees           float64
+		expiry             int32
+		txFee              dcrutil.Amount
+		ticketFee          dcrutil.Amount
+		resp               chan purchaseTicketResponse
+		noSplitTransaction bool
+		multiOutputSstx    bool
 	}
 
 	consolidateResponse struct {
@@ -1168,24 +1168,24 @@ func (w *Wallet) PurchaseTickets(minBalance, spendLimit dcrutil.Amount,
 	minConf int32, ticketAddr dcrutil.Address, account uint32,
 	numTickets int, poolAddress dcrutil.Address, poolFees float64,
 	expiry int32, txFee dcrutil.Amount, ticketFee dcrutil.Amount,
-	noSplitTransaction bool, purchaseTicketsSingleTransaction bool) ([]*chainhash.Hash,
+	noSplitTransaction bool, multiOutputSstx bool) ([]*chainhash.Hash,
 	error) {
 
 	req := purchaseTicketRequest{
-		minBalance:                       minBalance,
-		spendLimit:                       spendLimit,
-		minConf:                          minConf,
-		ticketAddr:                       ticketAddr,
-		account:                          account,
-		numTickets:                       numTickets,
-		poolAddress:                      poolAddress,
-		poolFees:                         poolFees,
-		expiry:                           expiry,
-		txFee:                            txFee,
-		ticketFee:                        ticketFee,
-		resp:                             make(chan purchaseTicketResponse),
-		noSplitTransaction:               noSplitTransaction,
-		purchaseTicketsSingleTransaction: purchaseTicketsSingleTransaction,
+		minBalance:         minBalance,
+		spendLimit:         spendLimit,
+		minConf:            minConf,
+		ticketAddr:         ticketAddr,
+		account:            account,
+		numTickets:         numTickets,
+		poolAddress:        poolAddress,
+		poolFees:           poolFees,
+		expiry:             expiry,
+		txFee:              txFee,
+		ticketFee:          ticketFee,
+		resp:               make(chan purchaseTicketResponse),
+		noSplitTransaction: noSplitTransaction,
+		multiOutputSstx:    multiOutputSstx,
 	}
 	w.purchaseTicketRequests <- req
 	resp := <-req.resp
