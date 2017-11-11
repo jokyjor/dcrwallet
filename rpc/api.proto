@@ -79,7 +79,7 @@ service TicketBuyerService {
     rpc SetPoolFees (SetPoolFeesRequest) returns (SetPoolFeesResponse);
     rpc SetMaxPerBlock (SetMaxPerBlockRequest) returns (SetMaxPerBlockResponse);
 	rpc SetNoSplitTransaction (SetNoSplitTransactionRequest) returns (SetNoSplitTransactionResponse);
-	rpc SetPurchaseTicketsSingleTransaction (SetPurchaseTicketsSingleTransactionRequest) returns (SetPurchaseTicketsSingleTransactionResponse);
+	rpc SetMultiOutputSstx (SetMultiOutputSstxRequest) returns (SetMultiOutputSstxResponse);
 }
 
 service SeedService {
@@ -648,6 +648,7 @@ message TicketBuyerConfigResponse{
     string voting_address = 21;
     int64 tx_fee = 22;
 	bool no_split_transaction = 23;
+	bool multi_output_sstx = 24;
 }
 
 message SetAccountRequest{
@@ -685,10 +686,10 @@ message SetNoSplitTransactionRequest{
 }
 message SetNoSplitTransactionResponse{}
 
-message SetPurchaseTicketsSingleTransactionRequest{
-	bool purchase_tickets_single_transaction = 1;
+message SetMultiOutputSstxRequest{
+	bool multi_output_sstx = 1;
 }
-message SetPurchaseTicketsSingleTransactionResponse{}
+message SetMultiOutputSstxResponse{}
 
 message SetPoolAddressRequest{
     string pool_address = 1;
