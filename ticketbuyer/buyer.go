@@ -103,7 +103,7 @@ type TicketPurchaser struct {
 	stakeImmature      uint32
 	stakeVoteSubsidy   dcrutil.Amount
 	noSplitTransaction bool
-	nultiOutputSstx    bool
+	multiOutputSstx    bool
 
 	// purchaserMtx protects the following runtime configurable options.
 	purchaserMtx      sync.Mutex
@@ -287,7 +287,7 @@ func (t *TicketPurchaser) SetNoSplitTransaction(noSplitTransaction bool) {
 // MultiOutputSstx returns the MultiOutputSstx config value
 func (t *TicketPurchaser) MultiOutputSstx() bool {
 	t.purchaserMtx.Lock()
-	multiOutputSstx := t.MultiOutputSstx
+	multiOutputSstx := t.multiOutputSstx
 	t.purchaserMtx.Unlock()
 	return multiOutputSstx
 }
