@@ -855,13 +855,14 @@ func (w *Wallet) compressWalletInternal(dbtx walletdb.ReadWriteTx, maxNumIns int
 	return &txHash, nil
 }
 
+
 // makeTicket creates a ticket from a split transaction output. It can optionally
 // create a ticket that pays a fee to a pool if a pool input and pool address are
 // passed.
-func makeTicket(params *chaincfg.Params, inputPool *extendedOutPoint,
+func makeTicket(params *chaincfg.Params, mtx *wire.MsgTx, inputPool *extendedOutPoint,
 	input *extendedOutPoint, addrVote dcrutil.Address, addrSubsidy dcrutil.Address,
 	ticketCost int64, addrPool dcrutil.Address) (*wire.MsgTx, error) {
-	mtx := wire.NewMsgTx()
+	//mtx := wire.NewMsgTx()
 
 	if addrPool != nil && inputPool != nil {
 		txIn := wire.NewTxIn(inputPool.op, []byte{})
@@ -957,9 +958,9 @@ func makeTicket(params *chaincfg.Params, inputPool *extendedOutPoint,
 	mtx.AddTxOut(txOut)
 
 	// Make sure we generated a valid SStx.
-	if _, err := stake.IsSStx(mtx); err != nil {
+	/**if _, err := stake.IsSStx(mtx); err != nil {
 		return nil, err
-	}
+	}**/
 
 	return mtx, nil
 }
@@ -1097,6 +1098,8 @@ func (w *Wallet) purchaseTicketsSplit(req purchaseTicketRequest) ([]*chainhash.H
 	// first ticket commitment of a smaller amount to the pool, while
 	// paying themselves with the larger ticket commitment.
 	var splitOuts []*wire.TxOut
+	var addrVote, addrSubsidy []dcrutil.Address
+
 	for i := 0; i < req.numTickets; i++ {
 		// No pool used.
 		if poolAddress == nil {
@@ -1129,6 +1132,38 @@ func (w *Wallet) purchaseTicketsSplit(req purchaseTicketRequest) ([]*chainhash.H
 			splitOuts = append(splitOuts, wire.NewTxOut(int64(userAmt), pkScript))
 		}
 
+		// If the user hasn't specified a voting address
+		// to delegate voting to, just use an address from
+		// this wallet. Check the passed address from the
+		// request first, then check the ticket address
+		// stored from the configuation. Finally, generate
+		// an address.
+		
+		err := walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
+			votingAddress := req.ticketAddr 
+			if votingAddress == nil {
+				votingAddress = w.ticketAddress 
+				if votingAddress == nil {
+					votingAddress, err = addrFunc(w.persistReturnedChild(dbtx), req.account)
+					if err != nil {
+						return err
+					}
+				}
+			}
+
+			addrVote = append(addrVote, votingAddress)
+
+			subsidyAddress, err  := addrFunc(w.persistReturnedChild(dbtx), req.account)
+			if err != nil {
+				return err
+			}
+
+			addrSubsidy = append(addrSubsidy, subsidyAddress)
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	txFeeIncrement := req.txFee
@@ -1152,6 +1187,11 @@ func (w *Wallet) purchaseTicketsSplit(req purchaseTicketRequest) ([]*chainhash.H
 				"purchases: %v", err)
 		}
 	}()
+
+
+    msgtx := wire.NewMsgTx()
+    var forSigning []udb.Credit
+    var firstEop *extendedOutPoint
 
 	// Generate the tickets individually.
 	ticketHashes := make([]*chainhash.Hash, 0, req.numTickets)
@@ -1199,39 +1239,8 @@ func (w *Wallet) purchaseTicketsSplit(req purchaseTicketRequest) ([]*chainhash.H
 			}
 		}
 
-		// If the user hasn't specified a voting address
-		// to delegate voting to, just use an address from
-		// this wallet. Check the passed address from the
-		// request first, then check the ticket address
-		// stored from the configuation. Finally, generate
-		// an address.
-		var addrVote, addrSubsidy dcrutil.Address
-		err := walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
-			addrVote = req.ticketAddr
-			if addrVote == nil {
-				addrVote = w.ticketAddress
-				if addrVote == nil {
-					addrVote, err = addrFunc(w.persistReturnedChild(dbtx), req.account)
-					if err != nil {
-						return err
-					}
-				}
-			}
+		firstEop = eop
 
-			addrSubsidy, err = addrFunc(w.persistReturnedChild(dbtx), req.account)
-			return err
-		})
-		if err != nil {
-			return ticketHashes, err
-		}
-
-		// Generate the ticket msgTx and sign it.
-		ticket, err := makeTicket(w.chainParams, eopPool, eop, addrVote,
-			addrSubsidy, int64(ticketPrice), poolAddress)
-		if err != nil {
-			return ticketHashes, err
-		}
-		var forSigning []udb.Credit
 		if eopPool != nil {
 			eopPoolCredit := udb.Credit{
 				OutPoint:     *eopPool.op,
@@ -1252,45 +1261,48 @@ func (w *Wallet) purchaseTicketsSplit(req purchaseTicketRequest) ([]*chainhash.H
 			FromCoinBase: false,
 		}
 		forSigning = append(forSigning, eopCredit)
+		
+
+		// Generate the ticket msgTx and sign it.
+		ticket, err := makeTicket(w.chainParams, msgtx, eopPool, eop, addrVote[i],
+			addrSubsidy[i], int64(ticketPrice), poolAddress)
+		if err != nil {
+			return ticketHashes, err
+		}
 
 		// Set the expiry.
 		ticket.Expiry = uint32(req.expiry)
+		
+		if !req.multiOutputSstx {
+			err := w.signAndValidateTicket(ticket, forSigning, eop)
+			if err != nil {
+				return nil, err
+			}
 
-		err = walletdb.View(w.db, func(tx walletdb.ReadTx) error {
-			ns := tx.ReadBucket(waddrmgrNamespaceKey)
-			return signMsgTx(ticket, forSigning, w.Manager, ns, w.chainParams)
-		})
-		if err != nil {
-			return ticketHashes, err
-		}
-		err = validateMsgTxCredits(ticket, forSigning)
-		if err != nil {
-			return ticketHashes, err
+			err = w.processTxRecordAndPublish(ticket, n)
+			if err != nil {
+				return nil, err
+			}
+
+			ticketHash := ticket.TxHash()
+			ticketHashes = append(ticketHashes, &ticketHash)
+			log.Infof("Successfully sent SStx purchase transaction %v", ticketHash)
+			
+			msgtx = wire.NewMsgTx()
+		}  
+	}
+
+	if req.multiOutputSstx {
+		if _, err := stake.IsSStx(msgtx); err != nil {
+			return nil, err
 		}
 
-		err = w.checkHighFees(dcrutil.Amount(eop.amt), ticket)
+		err := w.signAndValidateTicket(msgtx, forSigning, firstEop)
 		if err != nil {
 			return nil, err
 		}
 
-		rec, err := udb.NewTxRecordFromMsgTx(ticket, time.Now())
-		if err != nil {
-			return ticketHashes, err
-		}
-
-		// Open a DB update to insert and publish the transaction.  If
-		// publishing fails, the update is rolled back.
-		err = walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
-			err = w.processTransactionRecord(dbtx, rec, nil, nil)
-			if err != nil {
-				return err
-			}
-			return n.PublishTransaction(context.TODO(), ticket)
-		})
-		if err != nil {
-			return ticketHashes, err
-		}
-		ticketHash := ticket.TxHash()
+		ticketHash := msgtx.TxHash()
 		ticketHashes = append(ticketHashes, &ticketHash)
 		log.Infof("Successfully sent SStx purchase transaction %v", ticketHash)
 	}
