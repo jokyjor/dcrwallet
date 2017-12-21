@@ -16,6 +16,7 @@ import (
 	"github.com/decred/dcrd/dcrutil"
 	dcrrpcclient "github.com/decred/dcrd/rpcclient"
 	"github.com/decred/dcrwallet/wallet"
+	"github.com/decred/dcrwallet/sharedtxclient"
 )
 
 var (
@@ -77,6 +78,7 @@ type Config struct {
 	NoSpreadTicketPurchases   bool
 	VotingAddress             dcrutil.Address
 	TxFee                     int64
+	SharedTx                  *sharedtxclient.Config
 }
 
 // TicketPurchaser is the main handler for purchasing tickets. It decides
@@ -113,6 +115,9 @@ type TicketPurchaser struct {
 	maxPerBlock       int
 	maxInMempool      int
 	expiryDelta       int
+
+	// SharedTx Client
+	sharedTxClient   *sharedtxclient.Client
 }
 
 // Config returns the current ticket buyer configuration.
@@ -342,7 +347,7 @@ func (t *TicketPurchaser) SetExpiryDelta(expiryDelta int) {
 func NewTicketPurchaser(cfg *Config,
 	dcrdChainSvr *dcrrpcclient.Client,
 	w *wallet.Wallet,
-	activeNet *chaincfg.Params) (*TicketPurchaser, error) {
+	activeNet *chaincfg.Params, sharedTxClient *sharedtxclient.Client) (*TicketPurchaser, error) {
 	priceMode := avgPriceMode(AvgPriceVWAPMode)
 	switch cfg.AvgPriceMode {
 	case PriceTargetPool:
@@ -378,6 +383,7 @@ func NewTicketPurchaser(cfg *Config,
 		poolFees:          cfg.PoolFees,
 		maxInMempool:      cfg.MaxInMempool,
 		expiryDelta:       cfg.ExpiryDelta,
+		sharedTxClient:    sharedTxClient,
 	}, nil
 }
 
@@ -396,7 +402,7 @@ type PurchaseStats struct {
 
 // Purchase is the main handler for purchasing tickets for the user.
 // TODO Not make this an inlined pile of crap.
-func (t *TicketPurchaser) Purchase(height int64) (*PurchaseStats, error) {
+func (t *TicketPurchaser) Purchase(height int64,  sharedTxClient *sharedtxclient.Client) (*PurchaseStats, error) {
 
 	ps := &PurchaseStats{Height: height}
 	// Check to make sure that the current height has not already been seen
