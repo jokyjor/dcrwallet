@@ -24,6 +24,7 @@ import (
 	"github.com/decred/dcrwallet/version"
 	"github.com/decred/dcrwallet/wallet"
 	"github.com/decred/dcrwallet/wallet/txrules"
+	"github.com/decred/dcrwallet/sharedtxclient"
 	flags "github.com/jessevdk/go-flags"
 )
 
@@ -66,6 +67,9 @@ const (
 	defaultPriceTarget                              = 0
 	defaultBalanceToMaintainAbsolute                = 0
 	defaultBalanceToMaintainRelative                = 0.3
+
+	defaultEnaleSharedTx         = false
+	defaultSharedTxRetryInterval = 3600
 
 	walletDbName = "wallet.db"
 )
@@ -155,6 +159,8 @@ type config struct {
 	TBOpts ticketBuyerOptions `group:"Ticket Buyer Options" namespace:"ticketbuyer"`
 	tbCfg  ticketbuyer.Config
 
+	SharedTxOpts   sharedTxOptions `group:"SharedTx Options" namespace:"sharedtx"`
+
 	// Deprecated options
 	DataDir       *cfgutil.ExplicitString `short:"b" long:"datadir" default-mask:"-" description:"DEPRECATED -- use appdata instead"`
 	PruneTickets  bool                    `long:"prunetickets" description:"DEPRECATED -- old tickets are always pruned"`
@@ -184,7 +190,16 @@ type ticketBuyerOptions struct {
 	MaxPriceScale         float64             `long:"maxpricescale" description:"DEPRECATED -- Attempt to prevent the stake difficulty from going above this multiplier (>1.0) by manipulation, 0 to disable"`
 	PriceTarget           *cfgutil.AmountFlag `long:"pricetarget" description:"DEPRECATED -- A target to try to seek setting the stake price to rather than meeting the average price, 0 to disable"`
 	SpreadTicketPurchases bool                `long:"spreadticketpurchases" description:"DEPRECATED -- Spread ticket purchases evenly throughout the window"`
+
+	SharedTx             *sharedtxclient.Config
 }
+
+type sharedTxOptions struct {
+	Enable        bool   `long:"enable" description:"Enable wallet to join other participants in purchasing tickets in a single transaction"`
+	Host          string `long:"host" description:"SharedTx Server hostname"`
+	RetryInterval uint32 `long:"retryinterval" description:"How long to wait until a failed connection is retried"`
+}
+
 
 // cleanAndExpandPath expands environement variables and leading ~ in the
 // passed path, cleans the result, and returns it.
@@ -379,6 +394,17 @@ func loadConfig(ctx context.Context) (*config, []string, error) {
 			BalanceToMaintainAbsolute: cfgutil.NewAmountFlag(defaultBalanceToMaintainAbsolute),
 			BalanceToMaintainRelative: defaultBalanceToMaintainRelative,
 			VotingAddress:             cfgutil.NewAddressFlag(nil),
+
+			SharedTx: &sharedtxclient.Config{
+				Enable:        defaultEnaleSharedTx,
+				RetryInterval: defaultSharedTxRetryInterval,
+			},
+		},
+
+		// SharedTx Options
+		SharedTxOpts: sharedTxOptions{
+			Enable:        defaultEnaleSharedTx,
+			RetryInterval: defaultSharedTxRetryInterval,
 		},
 	}
 
@@ -932,6 +958,24 @@ func loadConfig(ctx context.Context) (*config, []string, error) {
 		VotingAddress:             votingAddress,
 		TxFee:                     int64(cfg.RelayFee.Amount),
 	}
+
+	// If SharedTx is enabled
+	// Only proceed if sharedtx host has been set
+	if cfg.SharedTxOpts.Enable && cfg.SharedTxOpts.Host == "" {
+		str := "SharedTx server hostname cannot be empty"
+		err := fmt.Errorf(str, funcName)
+		return loadConfigError(err)
+	}
+
+
+	// SharedTx Config
+	cfg.tbCfg.SharedTx = &sharedtxclient.Config{
+		Host:          cfg.SharedTxOpts.Host,
+		Enable:        cfg.SharedTxOpts.Enable,
+		RetryInterval: cfg.SharedTxOpts.RetryInterval,
+	}
+
+	cfg.TBOpts.SharedTx = cfg.tbCfg.SharedTx
 
 	// Make list of old versions of testnet directories.
 	var oldTestNets []string
