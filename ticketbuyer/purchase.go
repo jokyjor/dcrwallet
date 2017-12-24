@@ -42,7 +42,7 @@ func (p *PurchaseManager) purchase(height int64) {
 		log.Errorf("Failed to purchase tickets this round: %v", err)
 		return
 	}
-	purchaseInfo, err := p.purchaser.Purchase(height)
+	purchaseInfo, err := p.purchaser.Purchase(height, p.purchaser.sharedTxClient)
 	if err != nil {
 		log.Errorf("Failed to purchase tickets this round: %v", err)
 		return
