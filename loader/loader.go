@@ -17,6 +17,8 @@ import (
 	"github.com/decred/dcrwallet/wallet"
 	"github.com/decred/dcrwallet/walletdb"
 	_ "github.com/decred/dcrwallet/walletdb/bdb" // driver loaded during init
+
+	"github.com/decred/dcrwallet/sharedtxclient"
 )
 
 const (
@@ -45,6 +47,7 @@ type Loader struct {
 	addrIdxScanLen  int
 	allowHighFees   bool
 	relayFee        float64
+	sharedTxClient  *sharedtxclient.Client
 }
 
 // StakeOptions contains the various options necessary for stake mining.
@@ -60,7 +63,7 @@ type StakeOptions struct {
 
 // NewLoader constructs a Loader.
 func NewLoader(chainParams *chaincfg.Params, dbDirPath string, stakeOptions *StakeOptions, addrIdxScanLen int,
-	allowHighFees bool, relayFee float64) *Loader {
+	allowHighFees bool, relayFee float64, sharedTxClient *sharedtxclient.Client) *Loader {
 
 	return &Loader{
 		chainParams:    chainParams,
@@ -69,6 +72,7 @@ func NewLoader(chainParams *chaincfg.Params, dbDirPath string, stakeOptions *Sta
 		addrIdxScanLen: addrIdxScanLen,
 		allowHighFees:  allowHighFees,
 		relayFee:       relayFee,
+		sharedTxClient: sharedTxClient,
 	}
 }
 
@@ -165,7 +169,7 @@ func (l *Loader) CreateNewWallet(pubPassphrase, privPassphrase, seed []byte) (w 
 	w, err = wallet.Open(db, pubPassphrase, so.VotingEnabled, so.AddressReuse,
 		so.VotingAddress, so.PoolAddress, so.PoolFees, so.TicketFee,
 		l.addrIdxScanLen, so.StakePoolColdExtKey, l.allowHighFees,
-		l.relayFee, l.chainParams)
+		l.relayFee, l.chainParams,  l.sharedTxClient)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +212,7 @@ func (l *Loader) OpenExistingWallet(pubPassphrase []byte) (w *wallet.Wallet, rer
 	w, err = wallet.Open(db, pubPassphrase, so.VotingEnabled, so.AddressReuse,
 		so.VotingAddress, so.PoolAddress, so.PoolFees, so.TicketFee,
 		l.addrIdxScanLen, so.StakePoolColdExtKey, l.allowHighFees,
-		l.relayFee, l.chainParams)
+		l.relayFee, l.chainParams, l.sharedTxClient)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +292,7 @@ func (l *Loader) StartTicketPurchase(passphrase []byte, ticketbuyerCfg *ticketbu
 	}
 
 	w := l.wallet
-	p, err := ticketbuyer.NewTicketPurchaser(ticketbuyerCfg, l.chainClient, w, l.chainParams)
+	p, err := ticketbuyer.NewTicketPurchaser(ticketbuyerCfg, l.chainClient, w, l.chainParams, l.sharedTxClient)
 	if err != nil {
 		return err
 	}
