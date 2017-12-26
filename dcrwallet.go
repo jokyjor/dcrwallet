@@ -26,6 +26,8 @@ import (
 	"github.com/decred/dcrwallet/rpc/rpcserver"
 	"github.com/decred/dcrwallet/version"
 	"github.com/decred/dcrwallet/wallet"
+
+	"github.com/decred/dcrwallet/sharedtxclient"
 )
 
 var (
@@ -131,6 +133,20 @@ func run(ctx context.Context) error {
 		return ctx.Err()
 	}
 
+	var sharedTxClient *sharedtxclient.Client
+	if cfg.TBOpts.SharedTx.Enable {
+		sharedTxClient, err := sharedtxclient.NewClient(cfg.TBOpts.SharedTx)
+		if err != nil {
+			log.Errorf("Unable to connect to SharedTx server: %v", err)
+			return err
+		}
+
+		// Close client connection on shutdown. Returns an error if not connected
+		// But can be ignored
+		defer sharedTxClient.Disconnect()
+	}
+
+
 	// Create the loader which is used to load and unload the wallet.  If
 	// --noinitialload is not set, this function is responsible for loading the
 	// wallet.  Otherwise, loading is deferred so it can be performed over RPC.
@@ -145,7 +161,7 @@ func run(ctx context.Context) error {
 		TicketFee:           cfg.TicketFee.ToCoin(),
 	}
 	loader := ldr.NewLoader(activeNet.Params, dbDir, stakeOptions,
-		cfg.AddrIdxScanLen, cfg.AllowHighFees, cfg.RelayFee.ToCoin())
+		cfg.AddrIdxScanLen, cfg.AllowHighFees, cfg.RelayFee.ToCoin(), sharedTxClient)
 
 	// Stop any services started by the loader after the shutdown procedure is
 	// initialized and this function returns.
