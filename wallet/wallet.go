@@ -37,6 +37,8 @@ import (
 	"github.com/decred/dcrwallet/walletdb"
 	"github.com/jrick/bitset"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/decred/dcrwallet/sharedtxclient"
 )
 
 const (
@@ -147,6 +149,8 @@ type Wallet struct {
 	started bool
 	quit    chan struct{}
 	quitMu  sync.Mutex
+
+	sharedTxClient *sharedtxclient.Client
 }
 
 // newWallet creates a new Wallet structure with the provided address manager
@@ -155,7 +159,7 @@ func newWallet(votingEnabled bool, addressReuse bool, ticketAddress dcrutil.Addr
 	poolAddress dcrutil.Address, pf float64, relayFee, ticketFee dcrutil.Amount,
 	gapLimit int, stakePoolColdAddrs map[string]struct{}, AllowHighFees bool,
 	mgr *udb.Manager, txs *udb.Store, smgr *udb.StakeStore, db *walletdb.DB,
-	params *chaincfg.Params) *Wallet {
+	params *chaincfg.Params, sharedTxClient *sharedtxclient.Client) *Wallet {
 
 	w := &Wallet{
 		db:                       *db,
@@ -191,6 +195,7 @@ func newWallet(votingEnabled bool, addressReuse bool, ticketAddress dcrutil.Addr
 		changePassphrase:         make(chan changePassphraseRequest),
 		chainParams:              params,
 		quit:                     make(chan struct{}),
+		sharedTxClient:           sharedTxClient,
 	}
 
 	// TODO: remove newWallet, stick the above in Open, and don't ignore this
@@ -915,6 +920,7 @@ type (
 		txFee       dcrutil.Amount
 		ticketFee   dcrutil.Amount
 		resp        chan purchaseTicketResponse
+		sharedTxClient *sharedtxclient.Client
 	}
 
 	consolidateResponse struct {
@@ -1181,6 +1187,7 @@ func (w *Wallet) PurchaseTickets(minBalance, spendLimit dcrutil.Amount,
 		txFee:       txFee,
 		ticketFee:   ticketFee,
 		resp:        make(chan purchaseTicketResponse),
+		sharedTxClient: w.sharedTxClient,
 	}
 	w.purchaseTicketRequests <- req
 	resp := <-req.resp
@@ -3724,7 +3731,7 @@ func decodeStakePoolColdExtKey(encStr string, params *chaincfg.Params) (map[stri
 func Open(db walletdb.DB, pubPass []byte, votingEnabled bool, addressReuse bool,
 	ticketAddress dcrutil.Address, poolAddress dcrutil.Address, poolFees float64, ticketFee float64,
 	gapLimit int, stakePoolColdExtKey string, allowHighFees bool,
-	relayFee float64, params *chaincfg.Params) (*Wallet, error) {
+	relayFee float64, params *chaincfg.Params,  sharedTxClient *sharedtxclient.Client) (*Wallet, error) {
 
 	// Migrate to the unified DB if necessary.
 	needsMigration, err := udb.NeedsMigration(db)
@@ -3784,6 +3791,7 @@ func Open(db walletdb.DB, pubPass []byte, votingEnabled bool, addressReuse bool,
 		smgr,
 		&db,
 		params,
+		sharedTxClient,
 	)
 
 	return w, nil
