@@ -947,7 +947,7 @@ func makeTicket(params *chaincfg.Params, inputPool *extendedOutPoint,
 // wallet instance will be used.  Also, when the spend limit in the request is
 // greater than or equal to 0, tickets that cost more than that limit will
 // return an error that not enough funds are available.
-func (w *Wallet) purchaseTickets(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
+func (w *Wallet) purchaseTicketsLocal(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
 	n, err := w.NetworkBackend()
 	if err != nil {
 		return nil, err
@@ -1295,6 +1295,139 @@ func (w *Wallet) purchaseTickets(req purchaseTicketRequest) ([]*chainhash.Hash, 
 
 	return ticketHashes, nil
 }
+
+
+func (w *Wallet) getInputOutput(ticketPrice dcrutil.Amount, votingAddress, subsidyAddress dcrutil.Address, eligible []udb.Credit,
+	minConf int32, feeEst dcrutil.Amount) ([]*wire.TxIn, []*wire.TxOut, error) {
+	w.reorganizingLock.Lock()
+	reorg := w.reorganizing
+	w.reorganizingLock.Unlock()
+	if reorg {
+		return nil, nil, ErrBlockchainReorganizing
+	}
+
+	txouts := []*wire.TxOut{}
+	txins  := []*wire.TxIn{}
+
+	pkScript, err := txscript.PayToSStx(votingAddress)
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot create txout script: %s", err)
+	}
+	txouts = append(txouts, wire.NewTxOut(int64(ticketPrice), pkScript))
+
+	totalAdded := dcrutil.Amount(0)
+	for _, credit := range eligible {
+		txin := wire.NewTxIn(&credit.OutPoint, nil)
+		txins = append(txins, txin)
+		totalAdded += credit.Amount
+	}
+
+	if totalAdded < ticketPrice {
+		return nil, nil, ErrSStxNotEnoughFunds
+	}
+
+	limits := uint16(defaultTicketFeeLimits)
+	for _, credit := range eligible {
+
+		pkScript, err := txscript.GenerateSStxAddrPush(subsidyAddress, (credit.Amount - feeEst), limits)
+		if err != nil {
+			return nil, nil, fmt.Errorf("cannot create txout script: %s", err)
+		}
+		txouts = append(txouts, wire.NewTxOut(int64(0), pkScript))
+
+		changeAddr := subsidyAddress
+
+		// Add ne changeSStx Output. This randomizes the index of output
+		pkScript, err = txscript.PayToSStxChange(changeAddr)
+		if err != nil {
+			return nil, nil, fmt.Errorf("cannot create txout script: %s", err)
+		}
+		txouts = append(txouts, wire.NewTxOut(int64(feeEst), pkScript))
+	}
+
+	return txins, txouts, nil
+}
+
+func (w *Wallet) purchaseTicketsShared(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
+	n, err := w.NetworkBackend()
+	if err != nil {
+		return nil, err
+	}
+
+	// Ensure that the minimum number of confirmations is greater than -1
+	if req.minConf < 0 {
+		return nil, fmt.Errorf("Required number of confirmations should be greater than -1")
+	}
+
+	// Perform sanity check on enquiry
+	tipHeight, err := w.sanityCheckExpiry(req.expiry)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get Change address func
+	addrFunc := w.fetchAddressFunc()
+
+	// Try to get the pool address from the request. If none exists
+	// in the request, try to get the global pool address. Then do
+	// the same for pool fees, but check sanity too.
+	poolAddress := req.poolAddress
+	if poolAddress == nil {
+		poolAddress = w.PoolAddress()
+	}
+
+	poolFees := req.poolFees
+	if poolFees == 0.0 {
+		poolFees = w.PoolFees()
+	}
+	if poolAddress != nil && poolFees == 0.0 {
+		return nil, fmt.Errorf("pool address given, but pool fees not set")
+	}
+
+	ticketPrice, err := n.StakeDifficulty(context.TODO())
+	if err != nil {
+		return nil, err
+	}
+
+	neededPerTicket := req.minBalance + ticketPrice + EstMaxTicketFeeAmount
+	//amountNeeded := neededPerTicket
+
+	// Fetch votingAddress and subsidyAddress
+	votingAddress, subsidyAddress, err := w.fetchAddresses(req.ticketAddr, req.account, addrFunc)
+	if err != nil {
+		return nil, err
+	}
+
+	eligible, err := w.findEligibleOutputCredits(req.account, req.minConf, neededPerTicket, tipHeight)
+	if err != nil {
+		return nil, err
+	}
+
+	feeEst, err := w.estimateFee(eligible, votingAddress, ticketPrice)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get Input Outputs
+	_, _, err = w.getInputOutput(ticketPrice, votingAddress, subsidyAddress, eligible, req.minConf, feeEst)
+	if err != nil {
+		return nil, err
+	}
+
+
+	return nil, nil
+}
+
+
+func (w *Wallet) purchaseTickets(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
+	// Purchase tickets in shared transaction if enabled
+	if req.sharedTxClient != nil && req.sharedTxClient.Enable {
+		return w.purchaseTicketsShared(req)
+	}
+
+	return w.purchaseTicketsLocal(req)
+}
+
 
 // txToSStx creates a raw SStx transaction sending the amounts for each
 // address/amount pair and fee to each address and the miner.  minconf
@@ -1928,4 +2061,155 @@ func createUnsignedRevocation(ticketHash *chainhash.Hash, ticketPurchase *wire.M
 		}
 	}
 	return nil, errors.New("no suitable revocation outputs to pay relay fee")
+}
+
+
+
+
+// sanityCheckExpiry performs a sanity check on expiry
+// returns  tipHeight and error
+// from shweini/dcrwallet
+func (w *Wallet) sanityCheckExpiry(expiry int32) (int32, error) {
+	// Need a positive or zero expiry that is higher than the next block to
+	// generate.
+	if expiry < 0 {
+		return 0, fmt.Errorf("need positive expiry")
+	}
+	// Perform a sanity check on expiry.
+	var tipHeight int32
+	err := walletdb.View(w.db, func(tx walletdb.ReadTx) error {
+		ns := tx.ReadBucket(wtxmgrNamespaceKey)
+		_, tipHeight = w.TxStore.MainChainTip(ns)
+		return nil
+	})
+	if err != nil {
+		return tipHeight, err
+	}
+	if expiry <= tipHeight+1 && expiry > 0 {
+		return tipHeight, fmt.Errorf("need expiry that is beyond next height ("+
+			"given: %v, next height %v)", expiry, tipHeight+1)
+	}
+	return tipHeight, err
+}
+
+// fetchAddressFunc returns a change address
+// from shweini/dcrwallet
+func (w *Wallet) fetchAddressFunc() func(persistReturnedChildFunc, uint32) (dcrutil.Address, error) {
+	addrFunc := w.newChangeAddress
+	if w.addressReuse {
+		xpub := w.addressBuffers[udb.DefaultAccountNum].albExternal.branchXpub
+		addr, err := deriveChildAddress(xpub, 0, w.chainParams)
+		addrFunc = func(persistReturnedChildFunc, uint32) (dcrutil.Address, error) {
+			return addr, err
+		}
+	}
+	return addrFunc
+}
+
+
+// findEligibleOutputCredits abstracts the call to the findEligibleOutputsAmount func
+// it checks for possible errors and handles accordingly
+// from shweini/dcrwallet
+func (w *Wallet) findEligibleOutputCredits(account uint32, minConf int32, amountNeeded dcrutil.Amount, tipheight int32) ([]udb.Credit, error) {
+	var eligible []udb.Credit
+	err := walletdb.View(w.db, func(dbtx walletdb.ReadTx) error {
+		var err error
+		eligible, err = w.findEligibleOutputsAmount(dbtx, account, minConf, amountNeeded, tipheight)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(eligible) == 0 {
+		return nil, ErrSStxNotEnoughFunds
+	}
+	if len(eligible) > stake.MaxInputsPerSStx {
+		return nil, ErrSStxInputOverflow
+	}
+
+	return eligible, nil
+}
+
+
+
+// fetchAddresses returns a voting address. It checks if an address
+// was passed along with the request. if none was passed, it checks
+// for an address stored in configuration. If it finds none, it generates
+// an address from user wallet
+// from shweini/dcrwallet
+func (w *Wallet) fetchAddresses(ticketAddress dcrutil.Address,
+	account uint32, addrFunc func(persistReturnedChildFunc, uint32) (dcrutil.Address, error)) (dcrutil.Address, dcrutil.Address, error) {
+	addr := ticketAddress
+	var saddr dcrutil.Address
+	if addr == nil {
+		if w.ticketAddress != nil {
+			addr = w.ticketAddress
+		} else {
+			err := walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
+				var err error
+				addr, err = addrFunc(w.persistReturnedChild(dbtx), account)
+				return err
+			})
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+	}
+
+	err := walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
+		var err error
+		saddr, err = addrFunc(w.persistReturnedChild(dbtx), account)
+		return err
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return addr, saddr, nil
+}
+
+
+// from shweini/dcrwallet
+func (w *Wallet) estimateFee(eligible []udb.Credit, votingAddress dcrutil.Address,
+	ticketPrice dcrutil.Amount) (dcrutil.Amount, error) {
+
+	msgtx := wire.NewMsgTx()
+
+	scriptSizers := []txsizes.ScriptSizer{}
+
+	for _,_ = range eligible {
+		scriptSizers = append(scriptSizers, txsizes.P2SHScriptSize)
+	}
+
+	pkScript, err := txscript.PayToSStx(votingAddress)
+	if err != nil {
+		return dcrutil.Amount(0), fmt.Errorf("cannot create txout script: %s", err)
+	}
+	txout := wire.NewTxOut(int64(ticketPrice), pkScript)
+	msgtx.AddTxOut(txout)
+
+
+	limits := uint16(defaultTicketFeeLimits)
+	for _, credit := range eligible {
+		pkScript, err := txscript.GenerateSStxAddrPush(votingAddress, credit.Amount, limits)
+		if err != nil {
+			return  dcrutil.Amount(0), fmt.Errorf("cannot create txout script: %s", err)
+		}
+		txout := wire.NewTxOut(int64(0), pkScript)
+		msgtx.AddTxOut(txout)
+
+		// Add ne changeSStx Output. This randomizes the index of output
+		pkScript, err = txscript.PayToSStxChange(votingAddress)
+		if err != nil {
+			return  dcrutil.Amount(0), fmt.Errorf("cannot create txout script: %s", err)
+		}
+		msgtx.AddTxOut(wire.NewTxOut(int64(0), pkScript))
+	}
+
+	szEst := txsizes.EstimateSerializeSize(scriptSizers, msgtx.TxOut, true)
+	feeEst := txrules.FeeForSerializeSize(w.RelayFee(), szEst)
+
+	return feeEst, nil
+
 }
