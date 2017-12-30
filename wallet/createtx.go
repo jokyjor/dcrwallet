@@ -62,6 +62,11 @@ var (
 	// maxTxSize is the maximum size of a transaction we can
 	// build with the wallet.
 	maxTxSize = chaincfg.MainNetParams.MaxTxSize
+
+	
+	// EstMaxTicketFeeAmount is the estimated max ticket fee to be used for size
+	// calculation for eligible utxos for ticket purchasing.
+	const EstMaxTicketFeeAmount = 0.1 * 1e8
 )
 
 // extendedOutPoint is a UTXO with an amount.
@@ -107,6 +112,11 @@ var ErrBlockchainReorganizing = errors.New("blockchain is currently " +
 // ErrTicketPriceNotSet indicates that the wallet was recently connected
 // and that the ticket price has not yet been set.
 var ErrTicketPriceNotSet = errors.New("ticket price not yet established")
+
+
+// ErrSStxInputOverflow indicates that too many inputs were used to generate
+// a ticket.
+var ErrSStxInputOverflow = errors.New("too many inputs to purchase ticket with")
 
 // --------------------------------------------------------------------------------
 // Transaction creation
