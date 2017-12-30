@@ -62,12 +62,11 @@ var (
 	// maxTxSize is the maximum size of a transaction we can
 	// build with the wallet.
 	maxTxSize = chaincfg.MainNetParams.MaxTxSize
+)
 
-	
-	// EstMaxTicketFeeAmount is the estimated max ticket fee to be used for size
+// EstMaxTicketFeeAmount is the estimated max ticket fee to be used for size
 	// calculation for eligible utxos for ticket purchasing.
 	const EstMaxTicketFeeAmount = 0.1 * 1e8
-)
 
 // extendedOutPoint is a UTXO with an amount.
 type extendedOutPoint struct {
